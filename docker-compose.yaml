@@ -1,0 +1,22 @@
+services:
+  weather-hub:
+    build:
+      context: .
+    image: weather-hub:local
+    container_name: weather-hub
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+      # Only needed/used if TEMPEST_UDP_ENABLED=true; harmless to publish
+      # otherwise (nothing listens on it inside the container when disabled).
+      - "${TEMPEST_UDP_PORT:-50222}:${TEMPEST_UDP_PORT:-50222}/udp"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -1,0 +1,472 @@
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --text: #1a1d21;
+  --text-muted: #5c6570;
+  --accent: #2f6fed;
+  --border: #e3e7ec;
+  --shadow: 0 8px 30px rgba(20, 30, 50, 0.08);
+
+  /* Text sitting directly on the page background (outside card surfaces).
+     Weather-condition classes below override these two; cards always use
+     --text/--text-muted regardless, so they stay readable no matter what
+     the page background is doing. */
+  --page-text: var(--text);
+  --page-muted: var(--text-muted);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --surface: #1d2025;
+    --text: #eef1f5;
+    --text-muted: #9aa4b2;
+    --accent: #6ea1ff;
+    --border: #2b2f36;
+    --shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-attachment: fixed;
+  background-size: cover;
+  transition: background 1s ease;
+}
+
+/* Current-conditions-driven page backgrounds. Each sets its own contrast
+   pair so header text/nav stay readable regardless of how light or dark
+   the gradient is; --surface-based cards are unaffected since they always
+   use --text/--text-muted, not these. */
+body.weather-clear-day {
+  --page-text: #1a1d21;
+  --page-muted: #3d4552;
+  background: linear-gradient(180deg, #8ec5fc 0%, #f9d976 100%);
+}
+
+body.weather-clear-night {
+  --page-text: #eef1f5;
+  --page-muted: #b7c0cc;
+  background: linear-gradient(180deg, #0b1330 0%, #2a1f4d 100%);
+}
+
+body.weather-cloudy {
+  --page-text: #1a1d21;
+  --page-muted: #3d4552;
+  background: linear-gradient(180deg, #cfd8e3 0%, #98a5b3 100%);
+}
+
+body.weather-partly-cloudy-day {
+  --page-text: #1a1d21;
+  --page-muted: #3d4552;
+  background: linear-gradient(180deg, #8ec5fc 0%, #d7e3ee 100%);
+}
+
+body.weather-partly-cloudy-night {
+  --page-text: #eef1f5;
+  --page-muted: #b7c0cc;
+  background: linear-gradient(180deg, #16213e 0%, #3a4a63 100%);
+}
+
+body.weather-foggy {
+  --page-text: #1a1d21;
+  --page-muted: #3d4552;
+  background: linear-gradient(180deg, #d9dee3 0%, #b9c0c7 100%);
+}
+
+body.weather-rainy {
+  --page-text: #eef1f5;
+  --page-muted: #c7ced6;
+  background: linear-gradient(180deg, #5c6b7a 0%, #3a4550 100%);
+}
+
+body.weather-rainy-night {
+  --page-text: #eef1f5;
+  --page-muted: #b7c0cc;
+  background: linear-gradient(180deg, #232b36 0%, #10151c 100%);
+}
+
+body.weather-sleet {
+  --page-text: #eef1f5;
+  --page-muted: #c7ced6;
+  background: linear-gradient(180deg, #6b7f8f 0%, #455665 100%);
+}
+
+body.weather-snow-day {
+  --page-text: #1a1d21;
+  --page-muted: #3d4552;
+  background: linear-gradient(180deg, #e8f1f8 0%, #c3d6e6 100%);
+}
+
+body.weather-snow-night {
+  --page-text: #eef1f5;
+  --page-muted: #b7c0cc;
+  background: linear-gradient(180deg, #1f2b3d 0%, #3d5570 100%);
+}
+
+body.weather-thunderstorm {
+  --page-text: #eef1f5;
+  --page-muted: #c2bfcc;
+  background: linear-gradient(180deg, #2e2b3d 0%, #14121c 100%);
+}
+
+body.weather-windy {
+  --page-text: #1a1d21;
+  --page-muted: #3d4552;
+  background: linear-gradient(180deg, #a9c0c2 0%, #6f8b8d 100%);
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+@media (min-width: 900px) {
+  .page {
+    max-width: 1200px;
+    padding: 3.5rem 2.5rem 5rem;
+  }
+}
+
+.page-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  margin: 0 0 0.4rem;
+  font-size: 1.75rem;
+  letter-spacing: -0.01em;
+  color: var(--page-text);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--page-muted);
+  font-size: 0.95rem;
+}
+
+.station-name {
+  margin: 0;
+  color: var(--page-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.site-nav {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.site-nav a {
+  color: var(--page-muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding-bottom: 0.2rem;
+  border-bottom: 2px solid transparent;
+}
+
+.site-nav a.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.range-selector {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+}
+
+.hourly-day-tabs {
+  margin-bottom: 0.85rem;
+}
+
+.range-selector button {
+  font: inherit;
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.range-selector button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.custom-range {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: -1rem 0 1.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.custom-range input[type="date"] {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.3rem 0.5rem;
+}
+
+.custom-range button {
+  font: inherit;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.chart-wrap {
+  margin-top: 0.5rem;
+}
+
+.current-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  padding: 2rem;
+}
+
+.current-primary {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.current-icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.current-temp {
+  font-size: 3.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.current-conditions {
+  flex-basis: 100%;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+}
+
+@media (min-width: 900px) {
+  .current-card {
+    padding: 2.5rem 3rem;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1rem;
+  border-radius: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.stat-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.last-updated {
+  margin: 1.75rem 0 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+/* Sits directly on the page background (not inside a card), so it needs
+   the weather-background-aware contrast color instead of --text-muted. */
+#trend-status {
+  color: var(--page-muted);
+}
+
+.chart-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  padding: 1.5rem 1.75rem;
+  margin-top: 1.25rem;
+}
+
+.section-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.trend-heading {
+  text-align: center;
+  margin-top: 2rem;
+  color: var(--page-muted);
+}
+
+.chart-group-heading {
+  margin: 2rem 0 0.75rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--page-text);
+}
+
+#chart-grid > .chart-group-heading:first-child {
+  margin-top: 1.25rem;
+}
+
+.chart-group {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+.chart-group .chart-section {
+  margin-top: 0;
+}
+
+@media (min-width: 900px) {
+  .chart-group {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.hourly-strip {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.hourly-item {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 60px;
+  padding: 0.75rem 0.5rem;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.hourly-time {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.hourly-icon {
+  font-size: 1.4rem;
+}
+
+.hourly-temp {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.daily-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.daily-item {
+  display: grid;
+  grid-template-columns: 3.5rem 2rem 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.daily-item:last-child {
+  border-bottom: none;
+}
+
+.daily-day {
+  font-weight: 600;
+}
+
+.daily-icon {
+  font-size: 1.3rem;
+  text-align: center;
+}
+
+.daily-conditions {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.daily-precip {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.daily-sun {
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.daily-temps {
+  display: flex;
+  gap: 0.5rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.daily-low {
+  color: var(--text-muted);
+  font-weight: 400;
+}
