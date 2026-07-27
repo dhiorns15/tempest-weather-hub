@@ -498,6 +498,12 @@ function renderLineChart(existingChart, canvas, labels, datasets, yTickSuffix) {
     data,
     options: {
       responsive: true,
+      // Cloud-only fields are null on UDP-sourced rows (and vice versa for
+      // wind_lull, which is UDP-only) - at raw resolution that means most
+      // points for a given metric can be null. Without this, Chart.js draws
+      // nothing between them instead of connecting the real data that does
+      // exist every ~5 minutes.
+      spanGaps: true,
       plugins: { legend: { display: datasets.length > 1 } },
       interaction: { mode: "index", intersect: false },
       scales: {
