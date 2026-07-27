@@ -151,8 +151,11 @@ function escapeHtml(text) {
 
 function dayLabel(index, dayStartLocal) {
   if (index === 0) return "Today";
+  // day_start_local is a genuine unix epoch for the station's local midnight
+  // (e.g. 06:00 UTC for a UTC-6 station), not local clock digits mislabeled
+  // as UTC - so the browser's own local-timezone conversion is what's
+  // actually correct here, not a forced "UTC" override.
   return new Date(dayStartLocal * 1000).toLocaleDateString([], {
-    timeZone: "UTC",
     weekday: "short",
   });
 }
@@ -222,12 +225,11 @@ function renderHourlyStrip() {
 
 function formatTimeOfDay(unixSeconds) {
   if (!unixSeconds) return "—";
-  // Tempest encodes these as the station's local wall-clock time expressed
-  // as a literal unix epoch (not shifted for the viewer's timezone) - same
-  // convention as day_start_local elsewhere, so force UTC formatting here
-  // too rather than letting the browser apply its own offset on top.
+  // sunrise/sunset are genuine unix epochs (verified against a known
+  // UTC offset: this station's day_start_local decodes to 06:00 UTC, i.e.
+  // true local midnight at UTC-6) - not local clock digits mislabeled as
+  // UTC, so let the browser apply its own real timezone offset.
   return new Date(unixSeconds * 1000).toLocaleTimeString([], {
-    timeZone: "UTC",
     hour: "numeric",
     minute: "2-digit",
   });
