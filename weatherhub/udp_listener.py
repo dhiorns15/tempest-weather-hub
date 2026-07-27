@@ -112,14 +112,14 @@ def parse_obs_st(message: dict[str, Any], unit_system: str = "imperial") -> dict
         # from the local station" distinctly from the REST poller's timestamp.
         "udp_updated_at": raw["time"],
         "air_temperature": temp,
-        "relative_humidity": round(raw["relative_humidity"], 1),
+        "relative_humidity": raw["relative_humidity"],
         "wind_lull": wind_lull,
         "wind_avg": wind_avg,
         "wind_gust": wind_gust,
         "wind_direction": raw["wind_direction"],
         "station_pressure": pressure,
-        "uv": round(raw["uv"], 2),
-        "solar_radiation": round(raw["solar_radiation"]),
+        "uv": raw["uv"],
+        "solar_radiation": raw["solar_radiation"],
     }
 
 
