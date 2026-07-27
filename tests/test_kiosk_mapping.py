@@ -73,6 +73,26 @@ class TestBuildKioskResponse(unittest.TestCase):
         response = build_kiosk_response({}, {})
         self.assertEqual(response["list"], [])
 
+    def test_fractional_humidity_and_wind_direction_are_coerced_to_int(self) -> None:
+        # Regression test: UDP-sourced fields can be unrounded floats (e.g.
+        # 36.81), which Kiosk's Go structs reject outright since they type
+        # humidity/deg/dt as strict ints - any decimal point fails to
+        # unmarshal, even something like 36.0.
+        current = {
+            "relative_humidity": 36.81,
+            "wind_direction": 180.0,
+            "time": 1_700_000_000.0,
+        }
+
+        response = build_kiosk_response(current, {})
+
+        self.assertEqual(response["main"]["humidity"], 37)
+        self.assertIsInstance(response["main"]["humidity"], int)
+        self.assertEqual(response["wind"]["deg"], 180)
+        self.assertIsInstance(response["wind"]["deg"], int)
+        self.assertEqual(response["dt"], 1_700_000_000)
+        self.assertIsInstance(response["dt"], int)
+
 
 if __name__ == "__main__":
     unittest.main()

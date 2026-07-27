@@ -47,6 +47,21 @@ def _noon_local_timestamp(day_start_local: int) -> int:
     return day_start_local + 12 * 3600
 
 
+def _int(value: Any) -> int:
+    """Coerce to a plain int, rounding rather than truncating.
+
+    Kiosk's Go structs type humidity/wind-degrees/timestamps as strict ints,
+    matching OpenWeatherMap's real schema - a JSON literal with a decimal
+    point (e.g. 36.81, or even 36.0) fails to unmarshal into an int field
+    regardless of whether the fractional part is zero. Our own cache can
+    legitimately hold floats for these (e.g. UDP's raw, unrounded humidity
+    reading), so this boundary is where that gets normalized for Kiosk
+    specifically - the internal float stays as-is everywhere else (site,
+    charts, history).
+    """
+    return int(round(value or 0))
+
+
 def build_kiosk_response(
     current_conditions: dict[str, Any], forecast: dict[str, Any]
 ) -> dict[str, Any]:
@@ -68,13 +83,13 @@ def build_kiosk_response(
             "temp": current_conditions.get("air_temperature", 0),
             "temp_min": current_conditions.get("air_temperature", 0),
             "temp_max": current_conditions.get("air_temperature", 0),
-            "humidity": current_conditions.get("relative_humidity", 0),
+            "humidity": _int(current_conditions.get("relative_humidity", 0)),
         },
         "wind": {
             "speed": current_conditions.get("wind_avg", 0),
-            "deg": current_conditions.get("wind_direction", 0),
+            "deg": _int(current_conditions.get("wind_direction", 0)),
         },
-        "dt": current_conditions.get("time", 0),
+        "dt": _int(current_conditions.get("time", 0)),
     }
 
     list_items: list[dict[str, Any]] = []
@@ -85,7 +100,7 @@ def build_kiosk_response(
         temp = hour.get("air_temperature", 0)
         list_items.append(
             {
-                "dt": hour.get("time", 0),
+                "dt": _int(hour.get("time", 0)),
                 "main": {"temp_max": temp, "temp_min": temp},
                 "weather": [{"id": tempest_icon_to_owm_id(hour.get("icon"))}],
             }
@@ -97,7 +112,7 @@ def build_kiosk_response(
         day_start = day.get("day_start_local", 0)
         list_items.append(
             {
-                "dt": _noon_local_timestamp(day_start),
+                "dt": _int(_noon_local_timestamp(day_start)),
                 "main": {
                     "temp_max": day.get("air_temp_high", 0),
                     "temp_min": day.get("air_temp_low", 0),

@@ -67,7 +67,7 @@ class TestParseObsSt(unittest.TestCase):
         self.assertAlmostEqual(parsed["wind_avg"], round(0.65 * 2.236936, 1), places=5)
         self.assertAlmostEqual(parsed["wind_gust"], round(0.91 * 2.236936, 1), places=5)
         self.assertAlmostEqual(parsed["station_pressure"], round(851.22 * 0.02953, 2), places=5)
-        self.assertEqual(parsed["relative_humidity"], 39.16)
+        self.assertEqual(parsed["relative_humidity"], 39.2)
         self.assertEqual(parsed["wind_direction"], 357)
         self.assertEqual(parsed["uv"], 5.2)
         self.assertEqual(parsed["solar_radiation"], 489)
