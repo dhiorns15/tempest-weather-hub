@@ -74,10 +74,32 @@ python -m unittest discover -s tests -v
 
 ## Running with Docker Compose
 
+The included `docker-compose.yaml` builds straight from this GitHub repo — no
+local clone needed. Save `docker-compose.yaml` and `.env.example` somewhere,
+copy `.env.example` to `.env`, fill in your values, then:
+
 ```bash
-cp .env.example .env   # fill in your values
 docker compose up -d --build
 ```
+
+Always include `--build` when starting it — Compose only rebuilds when asked
+to, and Docker resolves `main` to its current commit before building, so
+`--build` is what actually fetches whatever's latest on GitHub (a bare
+`docker compose up -d` just reuses the image already built locally, however
+stale). If nothing's changed upstream, the rebuild is a fast no-op.
+
+**If that fails** with an error like `failed to evaluate path "https://...`,
+your Docker Compose is using the newer "Bake" builder, which has a bug
+handling remote git build contexts (seen on Docker Desktop for Windows).
+Build the image directly instead, then bring the stack up without rebuilding:
+
+```bash
+docker build -t weather-hub:local https://github.com/dhiorns15/tempest-weather-hub.git#main
+docker compose up -d
+```
+
+or clone the repo locally and change `build.context` in `docker-compose.yaml`
+back to `.` instead.
 
 The SQLite database lives under `./data`, mounted as a volume so history
 survives container restarts/rebuilds.

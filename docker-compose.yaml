@@ -1,7 +1,7 @@
 services:
   weather-hub:
     build:
-      context: .
+      context: https://github.com/dhiorns15/tempest-weather-hub.git#main
     image: weather-hub:local
     container_name: weather-hub
     ports:
