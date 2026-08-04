@@ -112,11 +112,19 @@ survives container restarts/rebuilds.
 | `GET /api/current` | none | latest cached observation |
 | `GET /api/history?start=&end=&resolution=` | API key | raw/hourly/daily observations |
 | `GET /widget/current?theme=light\|dark` | none | embeddable HTML widget |
-| `GET /kiosk/weather` | none | OpenWeatherMap-shaped output for Immich Kiosk's `custom_weather_url` |
+| `GET /kiosk/weather` | none | OpenWeatherMap-shaped output for Immich Kiosk's `custom_weather_url`, in whatever units `TEMPEST_UNITS` is set to (see note below) |
 | `GET /api/forecast` | none | cached hourly/daily forecast |
 | `GET /api/station-health` | none | battery/signal/uptime/firmware, only populated when `TEMPEST_UDP_ENABLED=true` |
 | `GET /api/capabilities` | none | `{"cloud_configured": bool, "udp_configured": bool}` - which data source(s) are active |
 | `/`, `/history.html`, ... | none | the site itself |
+
+**Kiosk unit mismatch:** Immich Kiosk's `custom_weather_url` fetcher does not
+send a `units=` query param or convert values for custom providers — it only
+does that for its own built-in OpenWeatherMap fetch path. It labels whatever
+numbers `/kiosk/weather` returns using that weather location's own `unit:
+metric|imperial` setting in Kiosk's config. Set that to match this hub's
+`TEMPEST_UNITS` (imperial by default) or Kiosk will display correct Fahrenheit
+values with a Celsius label (or vice versa).
 
 `/api/current` and the widgets are intentionally unauthenticated — they're
 meant to be embedded in public pages, and an API key baked into public HTML/JS
