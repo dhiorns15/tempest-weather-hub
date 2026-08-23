@@ -8,6 +8,8 @@ it).
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
 import mimetypes
@@ -20,7 +22,7 @@ from typing import Any
 
 from .api_keys import verify_key
 from .cache import LatestCache
-from .db import query_history
+from .db import history_columns, query_history
 from .kiosk_mapping import build_kiosk_response
 from .widgets import render_current_widget
 
@@ -59,11 +61,35 @@ def make_handler(
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
             logger.info("%s - %s", self.address_string(), format % args)
 
-        def _write_json(self, status: int, payload: dict[str, Any]) -> None:
+        def _write_json(
+            self, status: int, payload: dict[str, Any], disposition: str | None = None
+        ) -> None:
             body = json.dumps(payload).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
+            if disposition:
+                self.send_header("Content-Disposition", disposition)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _write_csv(
+            self,
+            status: int,
+            columns: list[str],
+            rows: list[dict[str, Any]],
+            disposition: str | None,
+        ) -> None:
+            buffer = io.StringIO()
+            writer = csv.writer(buffer)
+            writer.writerow(columns)
+            writer.writerows([row.get(column) for column in columns] for row in rows)
+            body = buffer.getvalue().encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            if disposition:
+                self.send_header("Content-Disposition", disposition)
             self.end_headers()
             self.wfile.write(body)
 
@@ -98,6 +124,13 @@ def make_handler(
                 )
                 return
 
+            export_format = query.get("format", ["json"])[0]
+            if export_format not in ("json", "csv"):
+                self._write_json(400, {"error": "format must be json or csv"})
+                return
+
+            download = query.get("download", ["0"])[0].lower() in ("1", "true", "yes")
+
             now = int(time.time())
             try:
                 end = int(query["end"][0]) if "end" in query else now
@@ -130,9 +163,20 @@ def make_handler(
                 return
 
             rows = query_history(db_path, start, end, resolution)
+
+            disposition = None
+            if download:
+                filename = f"weather-history-{start}-{end}-{resolution}.{export_format}"
+                disposition = f'attachment; filename="{filename}"'
+
+            if export_format == "csv":
+                self._write_csv(200, history_columns(resolution), rows, disposition)
+                return
+
             self._write_json(
                 200,
                 {"start": start, "end": end, "resolution": resolution, "observations": rows},
+                disposition,
             )
 
         def do_GET(self) -> None:  # noqa: N802

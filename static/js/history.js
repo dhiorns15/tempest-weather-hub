@@ -6,6 +6,7 @@ const RANGES = {
 };
 
 const charts = {}; // metric key -> Chart.js instance, reused across range switches
+let currentRange = null; // { start, end, resolution } for whatever's on screen, used by export buttons
 
 function renderStats(rows, resolution) {
   const values = rows.map((row) => ({
@@ -28,6 +29,8 @@ function renderStats(rows, resolution) {
 }
 
 async function loadHistory(start, end, resolution) {
+  currentRange = { start, end, resolution };
+
   const status = document.getElementById("history-status");
   status.textContent = "Loading…";
 
@@ -103,6 +106,17 @@ document.querySelectorAll(".range-selector button").forEach((button) => {
 });
 
 document.getElementById("apply-custom-range").addEventListener("click", applyCustomRange);
+
+function downloadHistory(format) {
+  if (!currentRange) return;
+  const { start, end, resolution } = currentRange;
+  window.location.href =
+    `/site/history?start=${start}&end=${end}&resolution=${resolution}` +
+    `&format=${format}&download=1`;
+}
+
+document.getElementById("download-csv").addEventListener("click", () => downloadHistory("csv"));
+document.getElementById("download-json").addEventListener("click", () => downloadHistory("json"));
 
 (async () => {
   await loadCapabilities();

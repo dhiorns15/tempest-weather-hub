@@ -211,6 +211,41 @@ class TestServerHistory(unittest.TestCase):
         except urllib.error.HTTPError as exc:
             return exc.code, json.loads(exc.read())
 
+    def _get_raw(self, path: str):
+        url = f"http://127.0.0.1:{self.port}{path}"
+        with urllib.request.urlopen(url, timeout=5) as response:  # noqa: S310
+            return response.status, response.headers, response.read()
+
+    def test_csv_format_returns_header_and_rows(self) -> None:
+        status, headers, body = self._get_raw("/site/history?format=csv")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "text/csv; charset=utf-8")
+        self.assertNotIn("Content-Disposition", headers)
+        lines = body.decode("utf-8").splitlines()
+        self.assertEqual(lines[0].split(",")[0], "ts")
+        self.assertEqual(len(lines), 6)  # header + 5 observations
+
+    def test_csv_download_sets_content_disposition(self) -> None:
+        status, headers, _ = self._get_raw("/site/history?format=csv&download=1")
+
+        self.assertEqual(status, 200)
+        self.assertIn("attachment", headers["Content-Disposition"])
+        self.assertIn(".csv", headers["Content-Disposition"])
+
+    def test_json_download_sets_content_disposition(self) -> None:
+        status, headers, body = self._get_raw("/site/history?download=1")
+
+        self.assertEqual(status, 200)
+        self.assertIn("attachment", headers["Content-Disposition"])
+        self.assertIn(".json", headers["Content-Disposition"])
+        self.assertEqual(len(json.loads(body)["observations"]), 5)
+
+    def test_invalid_format_returns_400(self) -> None:
+        status, body = self._get("/site/history?format=xlsx")
+        self.assertEqual(status, 400)
+        self.assertIn("error", body)
+
     def test_raw_history_defaults_to_last_24h(self) -> None:
         status, body = self._get("/site/history")
 

@@ -110,7 +110,7 @@ survives container restarts/rebuilds.
 |---|---|---|
 | `GET /healthz` | none | liveness check |
 | `GET /api/current` | none | latest cached observation |
-| `GET /api/history?start=&end=&resolution=` | API key | raw/hourly/daily observations |
+| `GET /api/history?start=&end=&resolution=&format=&download=` | API key | raw/hourly/daily observations, as JSON or CSV |
 | `GET /widget/current?theme=light\|dark` | none | embeddable HTML widget |
 | `GET /kiosk/weather` | none | OpenWeatherMap-shaped output for Immich Kiosk's `custom_weather_url`, in whatever units `TEMPEST_UNITS` is set to (see note below) |
 | `GET /api/forecast` | none | cached hourly/daily forecast |
@@ -140,6 +140,11 @@ same reason.
 - `resolution` — `raw` (every polled observation), `hourly`, or `daily`
   (aggregated via SQL `AVG`/`MIN`/`MAX`, bucketed in UTC). `raw` is capped at
   a 31-day range — use `hourly`/`daily` for longer spans.
+- `format` — `json` (default) or `csv`.
+- `download` — `1` to add a `Content-Disposition: attachment` header so
+  browsers save the response as a file instead of rendering it inline. The
+  History page's "Download CSV"/"Download JSON" buttons use this against
+  `/site/history` for whatever range is currently on screen.
 
 ### Managing API keys
 

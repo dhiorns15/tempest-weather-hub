@@ -100,6 +100,20 @@ _BUCKET_FORMAT = {
 }
 
 
+def history_columns(resolution: Resolution) -> list[str]:
+    """Column names query_history() returns for a given resolution, in order.
+
+    Kept in sync with the SELECT built there so CSV export can emit a header
+    row even when the query returns zero rows.
+    """
+    if resolution == "raw":
+        return ["ts", *_OBSERVATION_FIELDS]
+
+    columns = ["bucket", "air_temperature_avg", "air_temperature_min", "air_temperature_max"]
+    columns += [f"{field}_{func.lower()}" for field, func in _AGG_FIELDS.items()]
+    return columns
+
+
 def init_db(db_path: str) -> None:
     """Create the observations and api_keys tables if they don't already
     exist, and add any new observation columns to an existing (older-schema)
