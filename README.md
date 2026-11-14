@@ -215,11 +215,12 @@ and the site/API adapt automatically:
   `/kiosk/weather` all require the cloud source specifically (they're
   computed by WeatherFlow's forecast model, not present in the local
   protocol at all) and are hidden/disabled cleanly rather than shown
-  half-populated: the Hourly/Daily Forecast sections don't render, `/kiosk/
-  weather` and `/api/forecast` return a clear 503 explaining what's missing,
-  and REST-only chart groups (Precipitation, Lightning, Advanced, plus
-  individual REST-only cards within Temperature & Comfort / Pressure & Light)
-  don't render either.
+  half-populated: the Hourly/Daily Forecast sections and the cloud-only
+  tiles (rain, lightning, sun times) don't render, `/kiosk/weather` and
+  `/api/forecast` return a clear 503 explaining what's missing, and
+  REST-only charts (rain, lightning, the Advanced group) and REST-only
+  lines within a shared chart (feels-like and dew point on the Temperature
+  chart) don't render either.
 - **Both**: full functionality, current conditions refresh from whichever
   source last reported (UDP roughly every minute, REST every
   `POLL_INTERVAL_SECONDS`), and both write to history independently.
@@ -241,10 +242,13 @@ temperature, humidity, wind (lull/avg/gust/direction), station and sea-level
 pressure, UV, solar radiation, brightness, precipitation (today, yesterday,
 probability, rain-duration today/yesterday), lightning (strikes in the last
 1hr/3hr, nearest-strike distance), air density, and delta T. The current page
-and history page both chart all of it, grouped into Temperature & Comfort,
-Wind, Pressure & Light, Precipitation, Lightning, and Advanced sections (see
-`static/js/charts.js`'s `METRICS`/`CHART_LAYOUT` — add a field there and it
-appears on both pages automatically). Sunrise/sunset and pressure trend are
+and history page both chart all of it: the everyday charts are always shown,
+with Lightning and Advanced groups collapsed by default (the browser remembers
+which you've opened). Closely related fields share a chart — temperature,
+feels-like and dew point; wind lull/avg/gust; today's and yesterday's rain —
+capped at three lines each so they stay tellable apart. See
+`static/js/charts.js`'s `CHARTS`/`CHART_LAYOUT` — add a field there and it
+appears on both pages automatically. Sunrise/sunset and pressure trend are
 shown live but not charted (they're not the kind of thing you track a trend
 line for). Station health (battery, signal, uptime, firmware) is a separate
 panel sourced from the UDP listener's `device_status`/`hub_status` messages,
@@ -273,7 +277,8 @@ Not yet built (ideas from the original plan, pick up if interesting):
 - Per-key rate limiting + usage counters.
 - Multi-station support (built once already for `tempest-kiosk-weather-bridge`
   and reverted there — could be re-applied here).
-- Dark/light theme toggle + PWA installability for the site itself.
+- Manual dark/light theme toggle (the site follows the OS setting, and
+  always goes dark for night/storm conditions) + PWA installability.
 - RSS/JSON daily-summary feed.
 - History at UDP's ~1-minute cadence instead of the REST poll's 5 minutes,
   if finer-grained charts are wanted (kept out of this pass to avoid the

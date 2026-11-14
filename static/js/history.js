@@ -1,11 +1,17 @@
 const RANGES = {
-  day: { seconds: 86400, resolution: "raw" },
-  week: { seconds: 7 * 86400, resolution: "hourly" },
-  month: { seconds: 30 * 86400, resolution: "hourly" },
-  year: { seconds: 365 * 86400, resolution: "daily" },
+  day: { seconds: 86400, resolution: "raw", label: "Last 24 hours" },
+  week: { seconds: 7 * 86400, resolution: "hourly", label: "Last 7 days" },
+  month: { seconds: 30 * 86400, resolution: "hourly", label: "Last 30 days" },
+  year: { seconds: 365 * 86400, resolution: "daily", label: "Last 12 months" },
 };
 
-const charts = {}; // metric key -> Chart.js instance, reused across range switches
+const RESOLUTION_NOTES = {
+  raw: "every observation",
+  hourly: "hourly averages",
+  daily: "daily averages",
+};
+
+const charts = {}; // chart key -> Chart.js instance, reused across range switches
 let currentRange = null; // { start, end, resolution } for whatever's on screen, used by export buttons
 
 function renderStats(rows, resolution) {
@@ -13,11 +19,13 @@ function renderStats(rows, resolution) {
     avg: fieldValue(row, resolution, "air_temperature", "air_temperature_avg"),
     min: fieldValue(row, resolution, "air_temperature", "air_temperature_min"),
     max: fieldValue(row, resolution, "air_temperature", "air_temperature_max"),
+    gust: fieldValue(row, resolution, "wind_gust", "wind_gust_max"),
   }));
 
   const lows = values.map((v) => v.min).filter((v) => v != null);
   const highs = values.map((v) => v.max).filter((v) => v != null);
   const avgs = values.map((v) => v.avg).filter((v) => v != null);
+  const gusts = values.map((v) => v.gust).filter((v) => v != null);
 
   document.getElementById("stat-low").textContent =
     lows.length ? `${Math.round(Math.min(...lows))}°` : "—";
@@ -26,11 +34,15 @@ function renderStats(rows, resolution) {
   document.getElementById("stat-avg").textContent = avgs.length
     ? `${Math.round(avgs.reduce((a, b) => a + b, 0) / avgs.length)}°`
     : "—";
+  document.getElementById("stat-gust").innerHTML = gusts.length
+    ? `${Math.round(Math.max(...gusts))} <span class="tile-unit">mph</span>`
+    : "—";
 }
 
-async function loadHistory(start, end, resolution) {
+async function loadHistory(start, end, resolution, label) {
   currentRange = { start, end, resolution };
 
+  document.getElementById("range-label").textContent = label;
   const status = document.getElementById("history-status");
   status.textContent = "Loading…";
 
@@ -46,7 +58,7 @@ async function loadHistory(start, end, resolution) {
     renderAllMetricCharts(charts, rows, resolution);
 
     status.textContent = rows.length
-      ? `Showing ${rows.length} data points`
+      ? `${rows.length.toLocaleString()} data points · ${RESOLUTION_NOTES[resolution]}`
       : "No data in this range yet";
   } catch (err) {
     status.textContent = err.message || "Unable to load history";
@@ -54,10 +66,10 @@ async function loadHistory(start, end, resolution) {
 }
 
 function loadRange(rangeKey) {
-  const { seconds, resolution } = RANGES[rangeKey];
+  const { seconds, resolution, label } = RANGES[rangeKey];
   const end = Math.floor(Date.now() / 1000);
   const start = end - seconds;
-  loadHistory(start, end, resolution);
+  loadHistory(start, end, resolution, label);
 }
 
 // Longer spans would return huge raw payloads and /api/history caps raw at
@@ -67,6 +79,16 @@ function resolutionForRangeSeconds(seconds) {
   if (seconds <= 2 * 86400) return "raw";
   if (seconds <= 90 * 86400) return "hourly";
   return "daily";
+}
+
+function formatRangeDate(date) {
+  return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+
+const presetButtons = document.querySelectorAll("#range-presets button");
+
+function setActivePreset(activeButton) {
+  presetButtons.forEach((button) => button.classList.toggle("active", button === activeButton));
 }
 
 function applyCustomRange() {
@@ -79,28 +101,29 @@ function applyCustomRange() {
     return;
   }
 
-  const start = Math.floor(new Date(`${startValue}T00:00:00`).getTime() / 1000);
+  const startDate = new Date(`${startValue}T00:00:00`);
+  const endDate = new Date(`${endValue}T00:00:00`);
+  const start = Math.floor(startDate.getTime() / 1000);
   // Include the entire end day by running through to the following midnight.
-  const end = Math.floor(new Date(`${endValue}T00:00:00`).getTime() / 1000) + 86400;
+  const end = Math.floor(endDate.getTime() / 1000) + 86400;
 
   if (start >= end) {
     status.textContent = "Start date must be before end date";
     return;
   }
 
-  document
-    .querySelectorAll(".range-selector button")
-    .forEach((b) => b.classList.remove("active"));
+  setActivePreset(null);
 
-  loadHistory(start, end, resolutionForRangeSeconds(end - start));
+  const label =
+    startValue === endValue
+      ? formatRangeDate(startDate)
+      : `${formatRangeDate(startDate)} – ${formatRangeDate(endDate)}`;
+  loadHistory(start, end, resolutionForRangeSeconds(end - start), label);
 }
 
-document.querySelectorAll(".range-selector button").forEach((button) => {
+presetButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    document
-      .querySelectorAll(".range-selector button")
-      .forEach((b) => b.classList.remove("active"));
-    button.classList.add("active");
+    setActivePreset(button);
     loadRange(button.dataset.range);
   });
 });

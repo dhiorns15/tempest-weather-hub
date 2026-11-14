@@ -1,60 +1,14 @@
-// Shared helpers used by both the current-conditions trend chart (site.js)
-// and the full history charts (history.js) — kept in one place so the two
-// pages read /site/history rows the same way, and so the chart grid is
-// generated from one config instead of duplicated across two HTML files.
+// Shared by both pages: the weather-driven page background, the capability
+// lookup, and every history chart. Kept in one place so the current page
+// (site.js, fixed last-24h view) and the history page (history.js, range
+// picker) read /site/history rows the same way and build the same chart grid.
 
-const CHART_COLORS = {
-  temperature: "#2f6fed",
-  feelsLike: "#f2994a",
-  dewPoint: "#56ccf2",
-  wetBulb: "#6fcf97",
-  wetBulbGlobe: "#27ae60",
-  humidity: "#20a4a0",
-  windAvg: "#8a63d2",
-  windGust: "#d2638a",
-  windLull: "#bb6bd9",
-  pressure: "#c98a2e",
-  seaLevelPressure: "#9b51e0",
-  uv: "#e0574a",
-  solar: "#e0a83c",
-  brightness: "#f2c94c",
-  precip: "#4a90e0",
-  precipYesterday: "#2d9cdb",
-  precipProbability: "#9b51e0",
-  precipMinutesToday: "#2f80ed",
-  precipMinutesYesterday: "#56ccf2",
-  lightning1hr: "#eb5757",
-  lightning3hr: "#f2994a",
-  lightningDistance: "#9b51e0",
-  airDensity: "#828282",
-  deltaT: "#4f4f4f",
-};
-
-function fieldValue(row, resolution, rawField, aggField) {
-  return resolution === "raw" ? row[rawField] : row[aggField];
-}
-
-function pointTimestampMs(row, resolution) {
-  return resolution === "raw" ? row.ts * 1000 : Date.parse(row.bucket);
-}
-
-function formatChartLabel(ms, resolution) {
-  const date = new Date(ms);
-  if (resolution === "raw") {
-    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  }
-  if (resolution === "hourly") {
-    return date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric" });
-  }
-  return date.toLocaleDateString([], { month: "short", day: "numeric" });
-}
-
-function hexWithAlpha(hex, alpha) {
-  return hex + alpha;
-}
+// ---------------------------------------------------------------------------
+// Weather-driven page background
+// ---------------------------------------------------------------------------
 
 // Icon -> page-background class. Groups near-duplicate day/night variants
-// that should look the same (e.g. all sleet variants share one gradient).
+// that should look the same (e.g. all sleet variants share one sky).
 const WEATHER_BG_CLASSES = {
   "clear-day": "weather-clear-day",
   "clear-night": "weather-clear-night",
@@ -77,11 +31,26 @@ const WEATHER_BG_CLASSES = {
   windy: "weather-windy",
 };
 const DEFAULT_WEATHER_BG_CLASS = "weather-clear-day";
+const ALL_WEATHER_BG_CLASSES = [...new Set(Object.values(WEATHER_BG_CLASSES))];
+const SKY_STORAGE_KEY = "weatherhub.sky";
+
+function setWeatherClass(className) {
+  if (document.body.classList.contains(className)) return;
+  document.body.classList.remove(...ALL_WEATHER_BG_CLASSES);
+  document.body.classList.add(className);
+  // Night/storm skies switch the whole page to the dark tokens, so the
+  // charts' colours have to follow.
+  refreshChartTheme();
+}
 
 function applyWeatherBackground(icon) {
   const className = WEATHER_BG_CLASSES[icon] || DEFAULT_WEATHER_BG_CLASS;
-  document.body.classList.remove(...new Set(Object.values(WEATHER_BG_CLASSES)));
-  document.body.classList.add(className);
+  setWeatherClass(className);
+  try {
+    localStorage.setItem(SKY_STORAGE_KEY, className);
+  } catch (err) {
+    // storage unavailable (private window etc.) - purely a nicety, skip it
+  }
 }
 
 // Shared across both pages: populates #station-name (in the header) and the
@@ -104,8 +73,6 @@ async function loadStationHeader() {
   }
 }
 
-loadStationHeader();
-
 // Which data source(s) are configured server-side. Populated once at page
 // load via loadCapabilities(); defaults assume everything's available so a
 // slow/failed fetch doesn't hide content that's actually there.
@@ -120,398 +87,707 @@ async function loadCapabilities() {
   }
 }
 
-// Which fields to chart, and where. Shared by history.js (full range picker)
-// and site.js (fixed last-24h view) so both stay in sync automatically.
-// `title` is the chart-section heading; `label` is the dataset legend/tooltip
-// text (includes units).
-const METRICS = [
+// ---------------------------------------------------------------------------
+// Chart theme - read from the CSS custom properties so charts always match
+// whatever theme the page is actually showing.
+// ---------------------------------------------------------------------------
+
+function readChartTheme() {
+  const styles = getComputedStyle(document.body);
+  const value = (name) => styles.getPropertyValue(name).trim();
+  return {
+    series: [value("--series-1"), value("--series-2"), value("--series-3")],
+    text: value("--text"),
+    tick: value("--chart-tick"),
+    grid: value("--chart-grid"),
+    crosshair: value("--chart-crosshair"),
+    tooltipBg: value("--tooltip-bg"),
+    tooltipBorder: value("--tooltip-border"),
+  };
+}
+
+let CHART_THEME = readChartTheme();
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function applyChartTheme(chart) {
+  const theme = CHART_THEME;
+  const { scales, plugins } = chart.options;
+
+  scales.x.ticks.color = theme.tick;
+  scales.y.ticks.color = theme.tick;
+  scales.x.border.color = theme.grid;
+  scales.y.grid.color = theme.grid;
+  plugins.legend.labels.color = theme.tick;
+  plugins.tooltip.backgroundColor = theme.tooltipBg;
+  plugins.tooltip.borderColor = theme.tooltipBorder;
+  plugins.tooltip.titleColor = theme.text;
+  plugins.tooltip.bodyColor = theme.text;
+
+  const single = chart.data.datasets.length === 1;
+  chart.data.datasets.forEach((dataset) => {
+    const color = theme.series[dataset.seriesSlot];
+    dataset.borderColor = color;
+    dataset.pointHoverBackgroundColor = color;
+    dataset.pointHoverBorderColor = theme.tooltipBg;
+    // Area wash only where there's a single series; overlapping washes
+    // from several series just turn to mud.
+    dataset.backgroundColor = single ? hexToRgba(color, 0.1) : color;
+  });
+}
+
+function refreshChartTheme() {
+  CHART_THEME = readChartTheme();
+  if (typeof Chart === "undefined") return;
+  Object.values(Chart.instances).forEach((chart) => {
+    applyChartTheme(chart);
+    chart.update("none");
+  });
+}
+
+window
+  .matchMedia("(prefers-color-scheme: dark)")
+  .addEventListener("change", () => refreshChartTheme());
+
+// Thin vertical guide at the hovered point, so it's clear which instant the
+// tooltip is describing.
+const crosshairPlugin = {
+  id: "crosshair",
+  afterDatasetsDraw(chart) {
+    const active = chart.tooltip && chart.tooltip.getActiveElements();
+    if (!active || !active.length) return;
+    const x = active[0].element.x;
+    const { top, bottom } = chart.chartArea;
+    const { ctx } = chart;
+    ctx.save();
+    ctx.strokeStyle = CHART_THEME.crosshair;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.stroke();
+    ctx.restore();
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Chart definitions
+// ---------------------------------------------------------------------------
+
+// One entry per chart card. `series[].raw` is the column at raw resolution,
+// `agg` the column at hourly/daily resolution. `source` is which data source
+// a series needs: "both" works off either, "cloud"/"udp" only that one.
+// Series take the theme's colour slots in the order listed - at most three
+// per chart, which is as far as the palette stays distinguishable for
+// colour-blind readers.
+//
+// minSpan: the smallest y-range the chart will zoom in to, so a value that
+//   barely moved doesn't get stretched into a dramatic-looking swing.
+// floor/ceil: hard limits the padded y-range never crosses.
+const CHARTS = [
   {
     key: "temperature",
-    source: "both",
-    canvasId: "chart-temperature",
     title: "Temperature",
-    label: "Temperature (°)",
-    raw: "air_temperature",
-    agg: "air_temperature_avg",
-    color: CHART_COLORS.temperature,
-    yTickSuffix: "°",
-  },
-  {
-    key: "feelsLike",
-    source: "cloud",
-    canvasId: "chart-feels-like",
-    title: "Feels Like",
-    label: "Feels Like (°)",
-    raw: "feels_like",
-    agg: "feels_like_avg",
-    color: CHART_COLORS.feelsLike,
-    yTickSuffix: "°",
-  },
-  {
-    key: "dewPoint",
-    source: "cloud",
-    canvasId: "chart-dew-point",
-    title: "Dew Point",
-    label: "Dew Point (°)",
-    raw: "dew_point",
-    agg: "dew_point_avg",
-    color: CHART_COLORS.dewPoint,
-    yTickSuffix: "°",
-  },
-  {
-    key: "wetBulb",
-    source: "cloud",
-    canvasId: "chart-wet-bulb",
-    title: "Wet Bulb Temperature",
-    label: "Wet Bulb (°)",
-    raw: "wet_bulb_temperature",
-    agg: "wet_bulb_temperature_avg",
-    color: CHART_COLORS.wetBulb,
-    yTickSuffix: "°",
-  },
-  {
-    key: "wetBulbGlobe",
-    source: "cloud",
-    canvasId: "chart-wet-bulb-globe",
-    title: "Wet Bulb Globe Temperature",
-    label: "Wet Bulb Globe (°)",
-    raw: "wet_bulb_globe_temperature",
-    agg: "wet_bulb_globe_temperature_avg",
-    color: CHART_COLORS.wetBulbGlobe,
-    yTickSuffix: "°",
+    unit: "°",
+    tickSuffix: "°",
+    decimals: 1,
+    minSpan: 4,
+    series: [
+      { label: "Temperature", raw: "air_temperature", agg: "air_temperature_avg", source: "both" },
+      { label: "Feels like", raw: "feels_like", agg: "feels_like_avg", source: "cloud" },
+      { label: "Dew point", raw: "dew_point", agg: "dew_point_avg", source: "cloud" },
+    ],
   },
   {
     key: "humidity",
-    source: "both",
-    canvasId: "chart-humidity",
     title: "Humidity",
-    label: "Humidity (%)",
-    raw: "relative_humidity",
-    agg: "relative_humidity_avg",
-    color: CHART_COLORS.humidity,
-    yTickSuffix: "%",
+    unit: "%",
+    tickSuffix: "%",
+    decimals: 0,
+    minSpan: 10,
+    floor: 0,
+    ceil: 100,
+    series: [
+      { label: "Humidity", raw: "relative_humidity", agg: "relative_humidity_avg", source: "both" },
+    ],
+  },
+  {
+    key: "wind",
+    title: "Wind",
+    unit: " mph",
+    decimals: 1,
+    minSpan: 5,
+    floor: 0,
+    series: [
+      { label: "Average", raw: "wind_avg", agg: "wind_avg_avg", source: "both" },
+      { label: "Gust", raw: "wind_gust", agg: "wind_gust_max", source: "both" },
+      { label: "Lull", raw: "wind_lull", agg: "wind_lull_avg", source: "udp" },
+    ],
   },
   {
     key: "pressure",
-    source: "both",
-    canvasId: "chart-pressure",
     title: "Station Pressure",
-    label: "Pressure (inHg)",
-    raw: "station_pressure",
-    agg: "station_pressure_avg",
-    color: CHART_COLORS.pressure,
-  },
-  {
-    key: "seaLevelPressure",
-    source: "cloud",
-    canvasId: "chart-sea-level-pressure",
-    title: "Sea Level Pressure",
-    label: "Sea Level Pressure (inHg)",
-    raw: "sea_level_pressure",
-    agg: "sea_level_pressure_avg",
-    color: CHART_COLORS.seaLevelPressure,
+    unit: " inHg",
+    decimals: 2,
+    minSpan: 0.1,
+    series: [
+      { label: "Station pressure", raw: "station_pressure", agg: "station_pressure_avg", source: "both" },
+    ],
   },
   {
     key: "uv",
-    source: "both",
-    canvasId: "chart-uv",
     title: "UV Index",
-    label: "UV Index",
-    raw: "uv",
-    agg: "uv_max",
-    color: CHART_COLORS.uv,
+    unit: "",
+    decimals: 1,
+    minSpan: 2,
+    floor: 0,
+    series: [{ label: "UV index", raw: "uv", agg: "uv_max", source: "both" }],
   },
   {
     key: "solar",
-    source: "both",
-    canvasId: "chart-solar",
     title: "Solar Radiation",
-    label: "Solar Radiation (W/m²)",
-    raw: "solar_radiation",
-    agg: "solar_radiation_avg",
-    color: CHART_COLORS.solar,
-  },
-  {
-    key: "brightness",
-    source: "cloud",
-    canvasId: "chart-brightness",
-    title: "Brightness",
-    label: "Brightness (lux)",
-    raw: "brightness",
-    agg: "brightness_avg",
-    color: CHART_COLORS.brightness,
+    unit: " W/m²",
+    decimals: 0,
+    minSpan: 100,
+    floor: 0,
+    series: [
+      { label: "Solar radiation", raw: "solar_radiation", agg: "solar_radiation_avg", source: "both" },
+    ],
   },
   {
     key: "precip",
-    source: "cloud",
-    canvasId: "chart-precip",
-    title: "Precipitation Today",
-    label: "Precipitation Today (in)",
-    raw: "precip_accum_local_day",
-    agg: "precip_accum_local_day_max",
-    color: CHART_COLORS.precip,
-  },
-  {
-    key: "precipYesterday",
-    source: "cloud",
-    canvasId: "chart-precip-yesterday",
-    title: "Precipitation Yesterday",
-    label: "Precipitation Yesterday (in)",
-    raw: "precip_accum_local_yesterday",
-    agg: "precip_accum_local_yesterday_max",
-    color: CHART_COLORS.precipYesterday,
+    title: "Rain Accumulation",
+    unit: " in",
+    decimals: 2,
+    minSpan: 0.1,
+    floor: 0,
+    series: [
+      { label: "Today", raw: "precip_accum_local_day", agg: "precip_accum_local_day_max", source: "cloud" },
+      {
+        label: "Yesterday",
+        raw: "precip_accum_local_yesterday",
+        agg: "precip_accum_local_yesterday_max",
+        source: "cloud",
+      },
+    ],
   },
   {
     key: "precipProbability",
-    source: "cloud",
-    canvasId: "chart-precip-probability",
-    title: "Precipitation Probability",
-    label: "Precip. Probability (%)",
-    raw: "precip_probability",
-    agg: "precip_probability_avg",
-    color: CHART_COLORS.precipProbability,
-    yTickSuffix: "%",
+    title: "Chance of Rain",
+    unit: "%",
+    tickSuffix: "%",
+    decimals: 0,
+    minSpan: 20,
+    floor: 0,
+    ceil: 100,
+    series: [
+      { label: "Chance of rain", raw: "precip_probability", agg: "precip_probability_avg", source: "cloud" },
+    ],
   },
   {
-    key: "precipMinutesToday",
-    source: "cloud",
-    canvasId: "chart-precip-minutes-today",
-    title: "Rain Duration Today",
-    label: "Rain Duration Today (min)",
-    raw: "precip_minutes_local_day",
-    agg: "precip_minutes_local_day_max",
-    color: CHART_COLORS.precipMinutesToday,
-  },
-  {
-    key: "precipMinutesYesterday",
-    source: "cloud",
-    canvasId: "chart-precip-minutes-yesterday",
-    title: "Rain Duration Yesterday",
-    label: "Rain Duration Yesterday (min)",
-    raw: "precip_minutes_local_yesterday",
-    agg: "precip_minutes_local_yesterday_max",
-    color: CHART_COLORS.precipMinutesYesterday,
-  },
-  {
-    key: "lightning1hr",
-    source: "cloud",
-    canvasId: "chart-lightning-1hr",
-    title: "Lightning Strikes (last 1hr)",
-    label: "Strikes (last 1hr)",
-    raw: "lightning_strike_count_last_1hr",
-    agg: "lightning_strike_count_last_1hr_max",
-    color: CHART_COLORS.lightning1hr,
-  },
-  {
-    key: "lightning3hr",
-    source: "cloud",
-    canvasId: "chart-lightning-3hr",
-    title: "Lightning Strikes (last 3hr)",
-    label: "Strikes (last 3hr)",
-    raw: "lightning_strike_count_last_3hr",
-    agg: "lightning_strike_count_last_3hr_max",
-    color: CHART_COLORS.lightning3hr,
+    key: "lightningStrikes",
+    title: "Lightning Strikes",
+    unit: "",
+    decimals: 0,
+    minSpan: 4,
+    floor: 0,
+    series: [
+      {
+        label: "Last hour",
+        raw: "lightning_strike_count_last_1hr",
+        agg: "lightning_strike_count_last_1hr_max",
+        source: "cloud",
+      },
+      {
+        label: "Last 3 hours",
+        raw: "lightning_strike_count_last_3hr",
+        agg: "lightning_strike_count_last_3hr_max",
+        source: "cloud",
+      },
+    ],
   },
   {
     key: "lightningDistance",
-    source: "cloud",
-    canvasId: "chart-lightning-distance",
     title: "Nearest Lightning Strike",
-    label: "Distance (mi)",
-    raw: "lightning_strike_last_distance",
-    agg: "lightning_strike_last_distance_min",
-    color: CHART_COLORS.lightningDistance,
+    unit: " mi",
+    decimals: 0,
+    minSpan: 10,
+    floor: 0,
+    series: [
+      {
+        label: "Distance",
+        raw: "lightning_strike_last_distance",
+        agg: "lightning_strike_last_distance_min",
+        source: "cloud",
+      },
+    ],
+  },
+  {
+    key: "seaLevelPressure",
+    title: "Sea Level Pressure",
+    unit: " inHg",
+    decimals: 2,
+    minSpan: 0.1,
+    series: [
+      { label: "Sea level pressure", raw: "sea_level_pressure", agg: "sea_level_pressure_avg", source: "cloud" },
+    ],
+  },
+  {
+    key: "brightness",
+    title: "Brightness",
+    unit: " lux",
+    decimals: 0,
+    minSpan: 1000,
+    floor: 0,
+    compactTicks: true,
+    series: [{ label: "Brightness", raw: "brightness", agg: "brightness_avg", source: "cloud" }],
+  },
+  {
+    key: "rainDuration",
+    title: "Rain Duration",
+    unit: " min",
+    decimals: 0,
+    minSpan: 10,
+    floor: 0,
+    series: [
+      { label: "Today", raw: "precip_minutes_local_day", agg: "precip_minutes_local_day_max", source: "cloud" },
+      {
+        label: "Yesterday",
+        raw: "precip_minutes_local_yesterday",
+        agg: "precip_minutes_local_yesterday_max",
+        source: "cloud",
+      },
+    ],
+  },
+  {
+    key: "wetBulb",
+    title: "Wet Bulb Temperature",
+    unit: "°",
+    tickSuffix: "°",
+    decimals: 1,
+    minSpan: 4,
+    series: [
+      { label: "Wet bulb", raw: "wet_bulb_temperature", agg: "wet_bulb_temperature_avg", source: "cloud" },
+      {
+        label: "Wet bulb globe",
+        raw: "wet_bulb_globe_temperature",
+        agg: "wet_bulb_globe_temperature_avg",
+        source: "cloud",
+      },
+    ],
   },
   {
     key: "airDensity",
-    source: "cloud",
-    canvasId: "chart-air-density",
     title: "Air Density",
-    label: "Air Density (kg/m³)",
-    raw: "air_density",
-    agg: "air_density_avg",
-    color: CHART_COLORS.airDensity,
+    unit: " kg/m³",
+    decimals: 2,
+    minSpan: 0.05,
+    series: [{ label: "Air density", raw: "air_density", agg: "air_density_avg", source: "cloud" }],
   },
   {
     key: "deltaT",
-    source: "cloud",
-    canvasId: "chart-delta-t",
     title: "Delta T",
-    label: "Delta T (°)",
-    raw: "delta_t",
-    agg: "delta_t_avg",
-    color: CHART_COLORS.deltaT,
+    unit: "°",
+    tickSuffix: "°",
+    decimals: 1,
+    minSpan: 2,
+    series: [{ label: "Delta T", raw: "delta_t", agg: "delta_t_avg", source: "cloud" }],
   },
 ];
 
-const METRICS_BY_KEY = Object.fromEntries(METRICS.map((m) => [m.key, m]));
+const CHARTS_BY_KEY = Object.fromEntries(CHARTS.map((def) => [def.key, def]));
 
-// Which charts appear in which order/grouping. "wind" is a pseudo-key
-// handled specially (it's a 3-line chart, not a METRICS entry).
+// Which charts appear where. The first group is always visible; the rest
+// are collapsed by default (open/closed is remembered per browser).
 const CHART_LAYOUT = [
   {
-    heading: "Temperature & Comfort",
-    keys: ["temperature", "feelsLike", "dewPoint", "wetBulb", "wetBulbGlobe", "humidity"],
-  },
-  { heading: "Wind", keys: ["wind"] },
-  {
-    heading: "Pressure & Light",
-    keys: ["pressure", "seaLevelPressure", "uv", "solar", "brightness"],
-  },
-  {
-    heading: "Precipitation",
+    id: "primary",
     keys: [
+      "temperature",
+      "humidity",
+      "wind",
+      "pressure",
+      "uv",
+      "solar",
       "precip",
-      "precipYesterday",
       "precipProbability",
-      "precipMinutesToday",
-      "precipMinutesYesterday",
     ],
   },
-  { heading: "Lightning", keys: ["lightning1hr", "lightning3hr", "lightningDistance"] },
-  { heading: "Advanced", keys: ["airDensity", "deltaT"] },
+  { id: "lightning", heading: "Lightning", keys: ["lightningStrikes", "lightningDistance"] },
+  {
+    id: "advanced",
+    heading: "Advanced",
+    keys: ["seaLevelPressure", "brightness", "rainDuration", "wetBulb", "airDensity", "deltaT"],
+  },
 ];
 
-// Builds the chart-section DOM (once) inside the given empty container,
-// following CHART_LAYOUT. Charts are populated separately by
-// renderAllMetricCharts on each data refresh.
-// A metric is available if its source is "both" (works off either REST or
-// UDP data) or its required source is actually configured. "wind" is always
-// shown since avg/gust come from whichever source is configured either way.
-function isMetricAvailable(key) {
-  if (key === "wind") return true;
-  const metric = METRICS_BY_KEY[key];
-  return metric.source !== "cloud" || CAPABILITIES.cloud_configured;
+function isSourceAvailable(source) {
+  if (source === "cloud") return CAPABILITIES.cloud_configured;
+  if (source === "udp") return CAPABILITIES.udp_configured;
+  return true;
 }
 
+function availableSeries(def) {
+  return def.series.filter((series) => isSourceAvailable(series.source));
+}
+
+function groupStorageKey(id) {
+  return `weatherhub.charts.${id}.open`;
+}
+
+// Builds the chart-card DOM (once) inside the given empty container,
+// following CHART_LAYOUT. Charts are populated separately by
+// renderAllMetricCharts on each data refresh. A chart is left out entirely
+// when none of its series can exist with the configured data source(s).
 function buildChartGrid(containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  container.innerHTML = CHART_LAYOUT.map(({ heading, keys }) => {
-    const visibleKeys = keys.filter(isMetricAvailable);
-    if (visibleKeys.length === 0) return "";
+  container.innerHTML = CHART_LAYOUT.map(({ id, heading, keys }) => {
+    const cards = keys
+      .map((key) => CHARTS_BY_KEY[key])
+      .filter((def) => availableSeries(def).length > 0)
+      .map(
+        (def) => `
+          <section class="card chart-card">
+            <div class="chart-head">
+              <h3>${def.title}</h3>
+              <span class="chart-latest" id="chart-latest-${def.key}"></span>
+            </div>
+            <div class="chart-wrap"><canvas id="chart-${def.key}"></canvas></div>
+          </section>`
+      );
+    if (cards.length === 0) return "";
 
-    const sections = visibleKeys
-      .map((key) => {
-        if (key === "wind") {
-          return `
-            <section class="chart-section">
-              <h3 class="section-title">Wind</h3>
-              <div class="chart-wrap"><canvas id="chart-wind" height="220"></canvas></div>
-            </section>
-          `;
-        }
-        const metric = METRICS_BY_KEY[key];
-        return `
-          <section class="chart-section">
-            <h3 class="section-title">${metric.title}</h3>
-            <div class="chart-wrap"><canvas id="${metric.canvasId}" height="220"></canvas></div>
-          </section>
-        `;
-      })
-      .join("");
+    const grid = `<div class="chart-grid">${cards.join("")}</div>`;
+    if (!heading) return grid;
 
-    return `<h2 class="chart-group-heading">${heading}</h2><div class="chart-group">${sections}</div>`;
+    let open = false;
+    try {
+      open = localStorage.getItem(groupStorageKey(id)) === "1";
+    } catch (err) {
+      // storage unavailable - just start collapsed
+    }
+    return `
+      <details class="chart-group" data-group="${id}"${open ? " open" : ""}>
+        <summary>${heading} <span class="group-count">${cards.length} charts</span></summary>
+        ${grid}
+      </details>`;
   }).join("");
-}
 
-// chartsStore is a plain {} the caller owns (one per page) mapping metric key
-// -> Chart.js instance, so repeated refreshes update in place instead of
-// creating a new chart each time.
-function renderMetricChart(chartsStore, metric, labels, rows, resolution) {
-  const canvas = document.getElementById(metric.canvasId);
-  if (!canvas) return;
-  const values = rows.map((row) => fieldValue(row, resolution, metric.raw, metric.agg));
-
-  chartsStore[metric.key] = renderLineChart(
-    chartsStore[metric.key],
-    canvas,
-    labels,
-    [
-      {
-        label: metric.label,
-        data: values,
-        borderColor: metric.color,
-        backgroundColor: hexWithAlpha(metric.color, "22"),
-        tension: 0.3,
-        fill: true,
-        pointRadius: 0,
-      },
-    ],
-    metric.yTickSuffix
-  );
-}
-
-function renderWindChart(chartsStore, labels, rows, resolution) {
-  const canvas = document.getElementById("chart-wind");
-  if (!canvas) return;
-  const lull = rows.map((row) => fieldValue(row, resolution, "wind_lull", "wind_lull_avg"));
-  const avg = rows.map((row) => fieldValue(row, resolution, "wind_avg", "wind_avg_avg"));
-  const gust = rows.map((row) => fieldValue(row, resolution, "wind_gust", "wind_gust_max"));
-
-  chartsStore.wind = renderLineChart(chartsStore.wind, canvas, labels, [
-    {
-      label: "Lull (mph)",
-      data: lull,
-      borderColor: CHART_COLORS.windLull,
-      tension: 0.3,
-      pointRadius: 0,
-    },
-    {
-      label: "Avg (mph)",
-      data: avg,
-      borderColor: CHART_COLORS.windAvg,
-      tension: 0.3,
-      pointRadius: 0,
-    },
-    {
-      label: "Gust (mph)",
-      data: gust,
-      borderColor: CHART_COLORS.windGust,
-      tension: 0.3,
-      pointRadius: 0,
-    },
-  ]);
-}
-
-// Renders every metric (all charts on the page) from one /site/history response.
-function renderAllMetricCharts(chartsStore, rows, resolution) {
-  const labels = rows.map((row) => formatChartLabel(pointTimestampMs(row, resolution), resolution));
-  METRICS.forEach((metric) => renderMetricChart(chartsStore, metric, labels, rows, resolution));
-  renderWindChart(chartsStore, labels, rows, resolution);
-}
-
-// Renders (or updates, if given an existing Chart instance) a line chart.
-// Returns the Chart instance so the caller can reuse it on the next refresh.
-function renderLineChart(existingChart, canvas, labels, datasets, yTickSuffix) {
-  const data = { labels, datasets };
-
-  if (existingChart) {
-    existingChart.data = data;
-    existingChart.update();
-    return existingChart;
-  }
-
-  return new Chart(canvas, {
-    type: "line",
-    data,
-    options: {
-      responsive: true,
-      // Cloud-only fields are null on UDP-sourced rows (and vice versa for
-      // wind_lull, which is UDP-only) - at raw resolution that means most
-      // points for a given metric can be null. Without this, Chart.js draws
-      // nothing between them instead of connecting the real data that does
-      // exist every ~5 minutes.
-      spanGaps: true,
-      plugins: { legend: { display: datasets.length > 1 } },
-      interaction: { mode: "index", intersect: false },
-      scales: {
-        x: { ticks: { maxTicksLimit: 8 } },
-        y: yTickSuffix
-          ? { ticks: { callback: (v) => `${v}${yTickSuffix}` } }
-          : {},
-      },
-    },
+  container.querySelectorAll("details.chart-group").forEach((details) => {
+    details.addEventListener("toggle", () => {
+      try {
+        localStorage.setItem(groupStorageKey(details.dataset.group), details.open ? "1" : "0");
+      } catch (err) {
+        // not remembered this time; harmless
+      }
+    });
   });
 }
+
+// ---------------------------------------------------------------------------
+// Time axis
+//
+// Points are placed by their real timestamp (a linear axis in ms), not
+// evenly by index, so an outage shows up as a gap instead of being silently
+// closed up. Chart.js's own time scale needs a date-adapter library; picking
+// the tick positions by hand keeps this dependency-free.
+// ---------------------------------------------------------------------------
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+const TIME_STEPS = [
+  5 * MINUTE_MS,
+  15 * MINUTE_MS,
+  30 * MINUTE_MS,
+  HOUR_MS,
+  2 * HOUR_MS,
+  3 * HOUR_MS,
+  6 * HOUR_MS,
+  12 * HOUR_MS,
+  DAY_MS,
+  2 * DAY_MS,
+  7 * DAY_MS,
+  14 * DAY_MS,
+  30 * DAY_MS,
+  60 * DAY_MS,
+  90 * DAY_MS,
+];
+
+// A line is only drawn across a hole in the data up to this wide. Wider
+// than that is treated as a real gap (station/service was down). Raw allows
+// for cloud-only fields arriving every few minutes between UDP rows.
+const MAX_GAP_MS = {
+  raw: 45 * MINUTE_MS,
+  hourly: 3 * HOUR_MS,
+  daily: 3 * DAY_MS,
+};
+
+function fieldValue(row, resolution, rawField, aggField) {
+  return resolution === "raw" ? row[rawField] : row[aggField];
+}
+
+function pointTimestampMs(row, resolution) {
+  return resolution === "raw" ? row.ts * 1000 : Date.parse(row.bucket);
+}
+
+// Daily buckets are UTC calendar days, so they're labelled with their UTC
+// date - converting to local time would show every bucket as the day before
+// for anyone west of Greenwich.
+function buildTimeTicks(min, max, maxTicks, utc) {
+  const span = max - min;
+  const step = TIME_STEPS.find((s) => span / s <= maxTicks) || TIME_STEPS[TIME_STEPS.length - 1];
+  const ticks = [];
+
+  if (step < DAY_MS) {
+    const offset = utc ? 0 : new Date(min).getTimezoneOffset() * MINUTE_MS;
+    for (let t = Math.ceil((min - offset) / step) * step + offset; t <= max; t += step) {
+      ticks.push({ value: t });
+    }
+  } else {
+    const days = step / DAY_MS;
+    const cursor = new Date(min);
+    if (utc) cursor.setUTCHours(0, 0, 0, 0);
+    else cursor.setHours(0, 0, 0, 0);
+    const advance = (n) =>
+      utc ? cursor.setUTCDate(cursor.getUTCDate() + n) : cursor.setDate(cursor.getDate() + n);
+    while (cursor.getTime() < min) advance(1);
+    for (; cursor.getTime() <= max; advance(days)) ticks.push({ value: cursor.getTime() });
+  }
+
+  return { step, ticks };
+}
+
+function formatTimeTick(ms, step, utc) {
+  const date = new Date(ms);
+  const timeZone = utc ? "UTC" : undefined;
+  if (step >= DAY_MS) {
+    return date.toLocaleDateString([], { month: "short", day: "numeric", timeZone });
+  }
+  if (date.getHours() === 0 && date.getMinutes() === 0) {
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+  return step >= HOUR_MS
+    ? date.toLocaleTimeString([], { hour: "numeric" })
+    : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function formatTooltipTime(ms, resolution) {
+  const date = new Date(ms);
+  if (resolution === "daily") {
+    return date.toLocaleDateString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  }
+  return date.toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: resolution === "raw" ? "2-digit" : undefined,
+  });
+}
+
+function formatChartValue(value, def) {
+  if (value == null) return "—";
+  const text = value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: def.decimals,
+  });
+  return `${text}${def.unit}`;
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+
+function buildChartOptions(def) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      // A single series is already named by the card title.
+      legend: {
+        display: false,
+        position: "bottom",
+        align: "start",
+        labels: { usePointStyle: true, pointStyle: "line", boxWidth: 18, padding: 12, font: { size: 12 } },
+      },
+      tooltip: {
+        borderWidth: 1,
+        padding: 10,
+        cornerRadius: 10,
+        boxPadding: 5,
+        usePointStyle: true,
+        titleFont: { size: 12, weight: "600" },
+        bodyFont: { size: 12 },
+        callbacks: {
+          title: (items) =>
+            items.length ? formatTooltipTime(items[0].parsed.x, items[0].chart.$resolution) : "",
+          label: (item) => ` ${item.dataset.label}: ${formatChartValue(item.parsed.y, def)}`,
+          labelPointStyle: () => ({ pointStyle: "line", rotation: 0 }),
+        },
+      },
+    },
+    scales: {
+      x: {
+        type: "linear",
+        grid: { display: false },
+        border: {},
+        ticks: {
+          maxRotation: 0,
+          autoSkip: false,
+          font: { size: 11 },
+          callback(value) {
+            return formatTimeTick(value, this.$step, this.chart.$resolution === "daily");
+          },
+        },
+        afterBuildTicks(scale) {
+          const maxTicks = Math.max(2, Math.floor(scale.width / 70));
+          const { step, ticks } = buildTimeTicks(
+            scale.min,
+            scale.max,
+            maxTicks,
+            scale.chart.$resolution === "daily"
+          );
+          scale.$step = step;
+          scale.ticks = ticks;
+        },
+      },
+      y: {
+        grid: {},
+        border: { display: false },
+        ticks: {
+          maxTicksLimit: 5,
+          font: { size: 11 },
+          format: def.compactTicks ? { notation: "compact" } : undefined,
+          callback(value, index, ticks) {
+            const text = Chart.Ticks.formatters.numeric.call(this, value, index, ticks);
+            return def.tickSuffix ? `${text}${def.tickSuffix}` : text;
+          },
+        },
+        // Pad the range, and never zoom in further than minSpan - otherwise
+        // a reading that moved by a rounding error fills the whole chart.
+        afterDataLimits(scale) {
+          let { min, max } = scale;
+          if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+          const span = Math.max(max - min, def.minSpan);
+          const mid = (min + max) / 2;
+          const pad = span * 0.08;
+          min = Math.min(min, mid - span / 2) - pad;
+          max = Math.max(max, mid + span / 2) + pad;
+          // Slide the window rather than squash it when it hits a limit.
+          if (def.floor != null && min < def.floor) {
+            max += def.floor - min;
+            min = def.floor;
+          }
+          if (def.ceil != null && max > def.ceil) {
+            min -= max - def.ceil;
+            max = def.ceil;
+            if (def.floor != null) min = Math.max(min, def.floor);
+          }
+          scale.min = min;
+          scale.max = max;
+        },
+      },
+    },
+  };
+}
+
+// chartsStore is a plain {} the caller owns (one per page) mapping chart key
+// -> Chart.js instance, so repeated refreshes update in place instead of
+// creating a new chart each time.
+function renderChart(chartsStore, def, timestamps, rows, resolution) {
+  const canvas = document.getElementById(`chart-${def.key}`);
+  if (!canvas) return;
+
+  const series = availableSeries(def);
+  const datasets = series.map((s, slot) => ({
+    label: s.label,
+    seriesSlot: slot,
+    data: rows.map((row, i) => ({
+      x: timestamps[i],
+      y: fieldValue(row, resolution, s.raw, s.agg) ?? null,
+    })),
+    // Cloud-only fields are null on UDP-sourced rows (and vice versa for
+    // wind_lull), so at raw resolution most points of a given series can be
+    // null. Bridge those, but not a genuinely long hole in the data.
+    spanGaps: MAX_GAP_MS[resolution],
+    borderWidth: 2,
+    borderJoinStyle: "round",
+    cubicInterpolationMode: "monotone",
+    fill: series.length === 1 ? "start" : false,
+    pointRadius: 0,
+    pointHoverRadius: 5,
+    pointHoverBorderWidth: 2,
+  }));
+
+  const latestEl = document.getElementById(`chart-latest-${def.key}`);
+  if (latestEl) {
+    const lead = datasets[0].data;
+    let latest = null;
+    for (let i = lead.length - 1; i >= 0 && latest == null; i--) latest = lead[i].y;
+    latestEl.textContent = latest == null ? "" : formatChartValue(latest, def);
+  }
+
+  let chart = chartsStore[def.key];
+  if (!chart) {
+    chart = new Chart(canvas, {
+      type: "line",
+      data: { datasets },
+      options: buildChartOptions(def),
+      plugins: [crosshairPlugin],
+    });
+    chartsStore[def.key] = chart;
+  } else {
+    chart.data.datasets = datasets;
+  }
+
+  chart.$resolution = resolution;
+  chart.options.plugins.legend.display = datasets.length > 1;
+
+  // Span exactly the data that exists; with a single point (or none) fall
+  // back to Chart.js's own range so the axis doesn't collapse to zero width.
+  const first = timestamps[0];
+  const last = timestamps[timestamps.length - 1];
+  const hasRange = timestamps.length > 1 && last > first;
+  chart.options.scales.x.min = hasRange ? first : undefined;
+  chart.options.scales.x.max = hasRange ? last : undefined;
+
+  applyChartTheme(chart);
+  chart.update("none");
+}
+
+// Renders every chart on the page from one /site/history response.
+function renderAllMetricCharts(chartsStore, rows, resolution) {
+  CHART_THEME = readChartTheme();
+  const timestamps = rows.map((row) => pointTimestampMs(row, resolution));
+  CHARTS.forEach((def) => renderChart(chartsStore, def, timestamps, rows, resolution));
+}
+
+if (typeof Chart !== "undefined") {
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+}
+
+// Paint the last-seen sky straight away so the page doesn't flash the
+// neutral background while /api/current is in flight.
+try {
+  const remembered = localStorage.getItem(SKY_STORAGE_KEY);
+  if (ALL_WEATHER_BG_CLASSES.includes(remembered)) setWeatherClass(remembered);
+} catch (err) {
+  // storage unavailable - the fetch below sets it shortly anyway
+}
+
+loadStationHeader();

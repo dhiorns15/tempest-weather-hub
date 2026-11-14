@@ -3,111 +3,162 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <!-- The site ships its own dark theme; stop Dark Reader recolouring it. -->
+  <meta name="darkreader-lock" />
   <title>Weather Hub</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/site.css" />
 </head>
 <body>
   <main class="page">
-    <header class="page-header">
-      <h1>Weather Hub</h1>
-      <p class="station-name" id="station-name"></p>
-      <nav class="site-nav">
-        <a href="/" class="active">Current</a>
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-mark" src="/favicon.svg" alt="" />
+        <div>
+          <h1>Weather Hub</h1>
+          <p class="station-name" id="station-name"></p>
+        </div>
+      </div>
+      <nav class="site-nav" aria-label="Pages">
+        <a href="/" class="active" aria-current="page">Current</a>
         <a href="/history.html">History</a>
       </nav>
-      <p class="subtitle" id="station-status">Loading current conditions&hellip;</p>
     </header>
 
-    <section class="current-card" id="current-card" hidden>
-      <div class="current-primary">
-        <span class="current-icon" id="current-icon" aria-hidden="true"></span>
-        <span class="current-temp" id="current-temp"></span>
-        <span class="current-conditions" id="current-conditions"></span>
+    <p class="status-banner" id="station-status" role="status">Loading current conditions&hellip;</p>
+
+    <div class="dashboard" id="dashboard">
+      <div class="dash-col">
+        <section class="card hero" id="current-card" aria-label="Current conditions" hidden>
+          <div class="hero-main">
+            <div>
+              <div class="hero-temp" id="current-temp"></div>
+              <div class="hero-conditions" id="current-conditions"></div>
+              <div class="hero-meta">
+                <span id="current-feels"></span>
+                <span id="current-hilo"></span>
+              </div>
+            </div>
+            <div class="hero-icon" id="current-icon"></div>
+          </div>
+
+          <div class="tile-grid">
+            <div class="tile tile-wide">
+              <div class="tile-body">
+                <span class="tile-label">Wind</span>
+                <span class="tile-value" id="stat-wind">&mdash;</span>
+                <span class="tile-sub" id="stat-gust"></span>
+              </div>
+              <svg class="compass" viewBox="0 0 100 100" aria-hidden="true">
+                <circle class="compass-ring" cx="50" cy="50" r="36" />
+                <path class="compass-tick" d="M50 20v5M50 75v5M20 50h5M75 50h5" />
+                <text x="50" y="7">N</text>
+                <text x="94" y="50">E</text>
+                <text x="50" y="94">S</text>
+                <text x="6" y="50">W</text>
+                <!-- Marker sits on the bearing the wind is blowing FROM. -->
+                <g class="compass-needle" id="compass-needle" hidden>
+                  <line x1="50" y1="50" x2="50" y2="30" />
+                  <path d="M50 32l-7-14h14z" />
+                </g>
+              </svg>
+            </div>
+            <div class="tile">
+              <span class="tile-label">Humidity</span>
+              <span class="tile-value" id="stat-humidity">&mdash;</span>
+              <div class="meter"><div class="meter-fill" id="meter-humidity"></div></div>
+              <span class="tile-sub" id="stat-dew-point"></span>
+            </div>
+            <div class="tile">
+              <span class="tile-label">Pressure</span>
+              <span class="tile-value" id="stat-pressure">&mdash;</span>
+              <span class="tile-sub" id="stat-pressure-trend"></span>
+            </div>
+            <div class="tile">
+              <span class="tile-label">UV Index</span>
+              <span class="tile-value" id="stat-uv">&mdash;</span>
+              <div class="meter"><div class="meter-fill" id="meter-uv"></div></div>
+              <span class="tile-sub" id="stat-solar"></span>
+            </div>
+            <div class="tile" data-source="cloud">
+              <span class="tile-label">Rain Today</span>
+              <span class="tile-value" id="stat-rain">&mdash;</span>
+              <span class="tile-sub" id="stat-rain-yesterday"></span>
+            </div>
+            <div class="tile" data-source="cloud">
+              <span class="tile-label">Last Lightning</span>
+              <span class="tile-value" id="stat-lightning">&mdash;</span>
+              <span class="tile-sub" id="stat-lightning-when"></span>
+            </div>
+            <div class="tile" data-source="cloud">
+              <span class="tile-label">Sun</span>
+              <div class="tile-lines" id="stat-sun">&mdash;</div>
+            </div>
+          </div>
+
+          <p class="updated">
+            <span id="last-updated-rest"></span>
+            <span id="last-updated-udp"></span>
+          </p>
+        </section>
+
+        <section class="card" id="station-health-card" hidden>
+          <div class="card-head">
+            <h2 class="card-title">Station Health</h2>
+          </div>
+          <div class="tile-host">
+            <div class="tile-grid">
+              <div class="tile">
+                <span class="tile-label">Battery</span>
+                <span class="tile-value" id="health-battery">&mdash;</span>
+                <span class="tile-sub" id="health-battery-status"></span>
+              </div>
+              <div class="tile">
+                <span class="tile-label">Signal</span>
+                <span class="tile-value" id="health-signal">&mdash;</span>
+              </div>
+              <div class="tile">
+                <span class="tile-label">Hub Uptime</span>
+                <span class="tile-value" id="health-uptime">&mdash;</span>
+              </div>
+              <div class="tile">
+                <span class="tile-label">Firmware</span>
+                <span class="tile-value" id="health-firmware">&mdash;</span>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <div class="stat-grid">
-        <div class="stat-tile">
-          <span class="stat-label">Feels Like</span>
-          <span class="stat-value" id="stat-feels-like">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">Humidity</span>
-          <span class="stat-value" id="stat-humidity">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">Dew Point</span>
-          <span class="stat-value" id="stat-dew-point">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">Wind</span>
-          <span class="stat-value" id="stat-wind">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">Gust</span>
-          <span class="stat-value" id="stat-gust">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">Pressure</span>
-          <span class="stat-value" id="stat-pressure">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">UV Index</span>
-          <span class="stat-value" id="stat-uv">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">Solar Radiation</span>
-          <span class="stat-value" id="stat-solar">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">Last Lightning</span>
-          <span class="stat-value" id="stat-lightning">&mdash;</span>
-        </div>
+      <div class="dash-col" id="forecast-col" hidden>
+        <section class="card" id="hourly-forecast-section">
+          <div class="card-head">
+            <h2 class="card-title">Hourly Forecast</h2>
+            <div class="chips" id="hourly-day-tabs" role="group" aria-label="Forecast day"></div>
+          </div>
+          <div class="hourly-scroll" id="hourly-forecast"></div>
+        </section>
+
+        <section class="card daily-card" id="daily-forecast-section">
+          <div class="card-head">
+            <h2 class="card-title">Daily Forecast</h2>
+          </div>
+          <div id="daily-forecast"></div>
+        </section>
       </div>
+    </div>
 
-      <p class="last-updated" id="last-updated-rest"></p>
-    </section>
-
-    <section class="chart-section" id="hourly-forecast-section" hidden>
-      <h2 class="section-title">Hourly Forecast</h2>
-      <div class="range-selector hourly-day-tabs" id="hourly-day-tabs" role="group" aria-label="Forecast day"></div>
-      <div class="hourly-strip" id="hourly-forecast"></div>
-    </section>
-
-    <section class="chart-section" id="daily-forecast-section" hidden>
-      <h2 class="section-title">Daily Forecast</h2>
-      <div class="daily-list" id="daily-forecast"></div>
-    </section>
-
-    <h2 class="section-title trend-heading">Last 24 Hours</h2>
-    <p class="last-updated" id="trend-status"></p>
+    <div class="section-head">
+      <h2>Last 24 hours</h2>
+      <p class="section-note" id="trend-status" role="status"></p>
+    </div>
 
     <div id="chart-grid"></div>
-
-    <section class="chart-section" id="station-health-card" hidden>
-      <h2 class="section-title">Station Health</h2>
-      <div class="stat-grid">
-        <div class="stat-tile">
-          <span class="stat-label">Battery</span>
-          <span class="stat-value" id="health-battery">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">Signal</span>
-          <span class="stat-value" id="health-signal">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">Hub Uptime</span>
-          <span class="stat-value" id="health-uptime">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">Firmware</span>
-          <span class="stat-value" id="health-firmware">&mdash;</span>
-        </div>
-      </div>
-      <p class="last-updated" id="last-updated-udp"></p>
-    </section>
   </main>
 
   <script src="/js/vendor/chart.umd.min.js"></script>
+  <script src="/js/icons.js"></script>
   <script src="/js/charts.js"></script>
   <script src="/js/site.js"></script>
 </body>

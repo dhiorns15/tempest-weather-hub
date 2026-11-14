@@ -3,22 +3,31 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <!-- The site ships its own dark theme; stop Dark Reader recolouring it. -->
+  <meta name="darkreader-lock" />
   <title>Weather Hub — History</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/site.css" />
 </head>
 <body>
   <main class="page">
-    <header class="page-header">
-      <h1>Weather Hub</h1>
-      <p class="station-name" id="station-name"></p>
-      <nav class="site-nav">
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-mark" src="/favicon.svg" alt="" />
+        <div>
+          <h1>Weather Hub</h1>
+          <p class="station-name" id="station-name"></p>
+        </div>
+      </div>
+      <nav class="site-nav" aria-label="Pages">
         <a href="/">Current</a>
-        <a href="/history.html" class="active">History</a>
+        <a href="/history.html" class="active" aria-current="page">History</a>
       </nav>
     </header>
 
-    <section class="current-card">
-      <div class="range-selector" role="group" aria-label="Time range">
+    <section class="card toolbar" aria-label="Time range and export">
+      <div class="chips" id="range-presets" role="group" aria-label="Time range">
         <button type="button" data-range="day" class="active">Day</button>
         <button type="button" data-range="week">Week</button>
         <button type="button" data-range="month">Month</button>
@@ -28,31 +37,40 @@
       <div class="custom-range">
         <label>From <input type="date" id="range-start" /></label>
         <label>To <input type="date" id="range-end" /></label>
-        <button type="button" id="apply-custom-range">Apply</button>
+        <button type="button" class="btn" id="apply-custom-range">Apply</button>
       </div>
-
-      <div class="stat-grid" id="summary-stats">
-        <div class="stat-tile">
-          <span class="stat-label">Low</span>
-          <span class="stat-value" id="stat-low">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">Average</span>
-          <span class="stat-value" id="stat-avg">&mdash;</span>
-        </div>
-        <div class="stat-tile">
-          <span class="stat-label">High</span>
-          <span class="stat-value" id="stat-high">&mdash;</span>
-        </div>
-      </div>
-
-      <p class="last-updated" id="history-status"></p>
 
       <div class="export-actions">
-        <button type="button" id="download-csv">Download CSV</button>
-        <button type="button" id="download-json">Download JSON</button>
+        <button type="button" class="btn" id="download-csv">Download CSV</button>
+        <button type="button" class="btn" id="download-json">Download JSON</button>
       </div>
     </section>
+
+    <section class="card summary" aria-label="Summary for the selected range">
+      <div class="tile-grid">
+        <div class="tile">
+          <span class="tile-label">Low</span>
+          <span class="tile-value" id="stat-low">&mdash;</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">Average</span>
+          <span class="tile-value" id="stat-avg">&mdash;</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">High</span>
+          <span class="tile-value" id="stat-high">&mdash;</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">Peak Gust</span>
+          <span class="tile-value" id="stat-gust">&mdash;</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="section-head">
+      <h2 id="range-label">Last 24 hours</h2>
+      <p class="section-note" id="history-status" role="status"></p>
+    </div>
 
     <div id="chart-grid"></div>
   </main>
