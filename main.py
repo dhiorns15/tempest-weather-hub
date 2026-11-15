@@ -41,6 +41,7 @@ import sys
 import threading
 from pathlib import Path
 
+from weatherhub.backfill import start_startup_backfill
 from weatherhub.cache import LatestCache
 from weatherhub.db import init_db
 from weatherhub.dotenv import load_dotenv
@@ -90,6 +91,8 @@ def main() -> int:
     stop_event = threading.Event()
 
     if cloud_configured:
+        # Before the poller starts, so it sees the newest row from before startup.
+        start_startup_backfill(db_path, station_id, token, unit_system, stop_event)
         poll_thread = threading.Thread(
             target=poll_forever,
             args=(

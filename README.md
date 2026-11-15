@@ -52,6 +52,8 @@ adapts automatically - see [Running with only one data source](#running-with-onl
 | `TEMPEST_UDP_ENABLED` | One of this, or the cloud pair | `false` | `true` to listen for the station's local UDP broadcast (see below) |
 | `TEMPEST_UDP_PORT` | No | `50222` | UDP port to listen on - Tempest hubs always broadcast to 50222, so there's rarely a reason to change this |
 | `TEMPEST_HUB_SERIAL` | No | — | Optional `hub_sn` filter (e.g. `HB-00118618`); blank accepts any hub heard |
+| `BACKFILL_ON_STARTUP` | No | `true` | `false` to stop the service from filling history it missed while it was down (cloud source only - see [Backfilling missing history](#backfilling-missing-history)) |
+| `BACKFILL_MAX_DAYS` | No | `30` | How far back the startup catch-up reaches |
 
 ## Running locally
 
@@ -174,6 +176,67 @@ Use the printed key as a bearer token:
 ```bash
 curl -H "Authorization: Bearer wh_..." "http://localhost:8080/api/history?resolution=daily"
 ```
+
+### Backfilling missing history
+
+While this service is down it records nothing, but the station keeps
+reporting to Tempest's cloud, which keeps that history. With the cloud
+source configured (`TEMPEST_STATION_ID` + `TEMPEST_TOKEN`), the gap can be
+filled from there:
+
+- **Automatically on startup.** If the newest stored row is more than 15
+  minutes old, the missing span (at most `BACKFILL_MAX_DAYS`, 30 by default)
+  is fetched in a background thread. Startup and polling don't wait for it,
+  and a failure is only logged. Turn it off with `BACKFILL_ON_STARTUP=false`.
+- **By hand**, for older holes, with `scripts/backfill_history.py`:
+
+```bash
+# See what's missing and what would be inserted, without writing anything
+docker compose exec weather-hub python scripts/backfill_history.py --dry-run
+# Fill every hole (gap longer than 15 minutes) between the oldest stored row and now
+docker compose exec weather-hub python scripts/backfill_history.py
+# Or only within a range; dates are UTC, and a date-only --end includes that whole day
+docker compose exec weather-hub python scripts/backfill_history.py --start 2026-10-23 --end 2026-11-14
+```
+
+`--min-gap-minutes` (default 15) sets what counts as a hole, and `--pause`
+(default 3 seconds) the wait between requests. Without Docker, run the same
+script with `python scripts/backfill_history.py`.
+
+Backfill only ever adds rows. It inserts timestamps that fall inside a gap
+between stored rows, never within a minute of an existing row, and never
+updates or replaces anything already stored. Running it twice inserts
+nothing the second time. Each request is committed as it completes, so if
+one fails part-way, re-running carries on from where it stopped.
+
+Backfilled rows come from Tempest's device history
+(`/observations/device/{device_id}`, the station's `ST` sensor), at a
+**5-minute cadence**, the same as the REST poller's default interval. The
+API picks the resolution from the length of the requested range: up to 1
+day gives 1-minute data, up to 5 days gives 5-minute data, up to 30 days
+gives 30-minute data, and anything longer gives 3-hour data. Backfill
+therefore asks for windows of 1 to 5 days, so a three-week outage takes
+five requests. The values are converted to `TEMPEST_UNITS` the same way the
+UDP listener converts them.
+
+Columns a backfilled row has: `air_temperature`, `relative_humidity`,
+`wind_avg`, `wind_gust`, `wind_lull`, `wind_direction`, `station_pressure`,
+`brightness` (illuminance, lux), `uv`, `solar_radiation` and
+`precip_accum_local_day`. Everything else is NULL: `feels_like`,
+`dew_point`, the wet bulb fields, `sea_level_pressure`, `air_density`,
+`delta_t`, the lightning counts and distance, `precip_accum_local_yesterday`,
+the rain-duration minutes, `precip_probability`, `conditions` and `icon`.
+Those are derived or forecast values in `better_forecast`, and the history
+endpoint doesn't return them. The lightning columns are rolling 1-hour and
+3-hour totals, and the history only has per-interval strike counts.
+
+`precip_accum_local_day` comes from the device's own local-day rain total
+and resets at local midnight, the same as the live field. During the day it
+can differ from what `better_forecast` reported live, because the live
+figure gets revised as it goes. On one rainy day in October 2026, the live
+total rose to 0.26 in, fell back to 0.20 in and ended at 0.24 in, while the
+device history rose steadily to 0.24 in. Both ended the day at the same
+total.
 
 ### Local UDP broadcast (optional, faster current conditions)
 
