@@ -76,6 +76,12 @@ class TestRenderCurrentWidget(unittest.TestCase):
                 self.assertNotIn("@import", html_out)
                 self.assertNotIn("fetch(", html_out)
 
+    def test_opts_out_of_dark_reader(self) -> None:
+        # Dark Reader would otherwise recolour the icon fills inside the frame.
+        html_out = render_current_widget(FULL_SNAPSHOT, icons_js=ICONS_JS)
+
+        self.assertIn('<meta name="darkreader-lock">', html_out)
+
     def test_missing_snapshot_shows_placeholder(self) -> None:
         html_out = render_current_widget(None, icons_js=ICONS_JS)
 

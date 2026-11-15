@@ -71,6 +71,8 @@ _CURRENT_TEMPLATE = Template(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The widget ships its own light/dark themes; stop Dark Reader recolouring it. -->
+<meta name="darkreader-lock">
 <title>Weather</title>
 <style>
 $tokens
