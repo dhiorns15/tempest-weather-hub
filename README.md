@@ -129,6 +129,25 @@ back to `.` instead.
 The SQLite database lives under `./data`, mounted as a volume so history
 survives container restarts/rebuilds.
 
+### Running the bundled scripts in the container
+
+The helper scripts (`scripts/manage_keys.py`, `scripts/backfill_history.py`,
+`scripts/send_test_alert.py`) run inside the running container. Either form
+works:
+
+```bash
+# From the folder that holds docker-compose.yaml
+docker compose exec weather-hub python scripts/<script>.py ...
+# From anywhere - the compose file names the container "weather-hub"
+docker exec weather-hub python scripts/<script>.py ...
+```
+
+`docker compose exec` only works from the stack's own folder; anywhere else
+it fails with `no configuration file provided: not found`. That includes a
+plain shell on Unraid, where Compose Manager keeps the stack under
+`/boot/config/plugins/compose.manager/projects/<stack name>/` - use
+`docker exec` there. The examples below use the `docker compose exec` form.
+
 ## API
 
 | Route | Auth | Notes |
@@ -295,7 +314,9 @@ python scripts/manage_keys.py revoke <id>
 ```
 
 Running via Docker Compose, use `docker compose exec` instead (the script shares
-the running container's `data/weather.db`):
+the running container's `data/weather.db`), or `docker exec` from outside the
+stack's folder - see
+[Running the bundled scripts in the container](#running-the-bundled-scripts-in-the-container):
 
 ```bash
 docker compose exec weather-hub python scripts/manage_keys.py create --label "my-app"
@@ -327,6 +348,8 @@ docker compose exec weather-hub python scripts/backfill_history.py --dry-run
 docker compose exec weather-hub python scripts/backfill_history.py
 # Or only within a range; dates are UTC, and a date-only --end includes that whole day
 docker compose exec weather-hub python scripts/backfill_history.py --start 2026-10-23 --end 2026-11-14
+# Not in the stack's folder (e.g. a shell on Unraid)? Use docker exec instead
+docker exec weather-hub python scripts/backfill_history.py --start 2026-10-23 --end 2026-11-14
 ```
 
 `--min-gap-minutes` (default 15) sets what counts as a hole, and `--pause`
