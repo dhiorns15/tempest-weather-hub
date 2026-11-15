@@ -25,9 +25,11 @@ from .api_keys import verify_key
 from .cache import LatestCache
 from .db import history_columns, query_history
 from .kiosk_mapping import build_kiosk_response
+from .records import RecordsCache
 from .station_timezone import DEFAULT_TIMEZONE, StationTimezone
 from .tempest_client import display_units
 from .widgets import load_icons_js, render_current_widget
+from .wind_rose import wind_rose
 
 logger = logging.getLogger("weatherhub")
 
@@ -69,6 +71,7 @@ def make_handler(
 ) -> type[BaseHTTPRequestHandler]:
     static_dir = static_dir.resolve()
     units = display_units(unit_system)
+    records_cache = RecordsCache()
 
     def timezone_name() -> str:
         return station_timezone.name if station_timezone is not None else DEFAULT_TIMEZONE
@@ -204,6 +207,23 @@ def make_handler(
                 disposition,
             )
 
+        def _handle_wind_rose(self, query: dict[str, list[str]]) -> None:
+            # Same start/end handling as history: unix timestamps, the last
+            # 24 hours by default.
+            now = int(time.time())
+            try:
+                end = int(query["end"][0]) if "end" in query else now
+                start = (
+                    int(query["start"][0]) if "start" in query else end - _DEFAULT_RANGE_SECONDS
+                )
+            except ValueError:
+                self._write_json(400, {"error": "start/end must be unix timestamps"})
+                return
+            if start >= end:
+                self._write_json(400, {"error": "start must be before end"})
+                return
+            self._write_json(200, wind_rose(db_path, start, end, units["system"]))
+
         def do_GET(self) -> None:  # noqa: N802
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path.rstrip("/") or "/"
@@ -294,6 +314,16 @@ def make_handler(
                 # it, so the site gets its own unauthenticated internal route
                 # instead of the key-gated public API.
                 self._handle_history(query)
+                return
+
+            if path == "/site/records":
+                # Record highs/lows and "on this day" comparisons for the
+                # History page, over station-local days (see records.py).
+                self._write_json(200, records_cache.get(db_path, timezone_name(), units))
+                return
+
+            if path == "/site/wind-rose":
+                self._handle_wind_rose(query)
                 return
 
             if path == "/kiosk/weather":
