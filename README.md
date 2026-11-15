@@ -55,6 +55,23 @@ adapts automatically - see [Running with only one data source](#running-with-onl
 | `BACKFILL_ON_STARTUP` | No | `true` | `false` to stop the service from filling history it missed while it was down (cloud source only - see [Backfilling missing history](#backfilling-missing-history)) |
 | `BACKFILL_MAX_DAYS` | No | `30` | How far back the startup catch-up reaches |
 | `STATION_TIMEZONE` | No | cloud-reported, else `UTC` | IANA timezone name (e.g. `America/Denver`) whose calendar days the daily history buckets follow. Normally unnecessary: the timezone Tempest's cloud reports for the station is used and remembered across restarts. Set it for UDP-only setups, or to override. An invalid name is logged and ignored |
+| `ALERT_WEBHOOK_URL` | No | — | Alert webhook (Slack, Discord, ntfy, or anything taking a POST) - see [Alerts](#alerts-optional) |
+| `ALERT_WEBHOOK_FORMAT` | No | `json` | `json` (Slack/Discord/generic) or `ntfy` |
+| `ALERT_WEBHOOK_TOKEN` | No | — | Sent as `Authorization: Bearer ...` (e.g. an ntfy access token) |
+| `ALERT_SMTP_HOST` | No | — | SMTP server for email alerts (also needs `ALERT_EMAIL_TO`) |
+| `ALERT_SMTP_PORT` | No | `587` / `465` / `25` | Defaults by `ALERT_SMTP_SECURITY` |
+| `ALERT_SMTP_SECURITY` | No | `starttls` | `starttls`, `ssl` (implicit TLS), or `none` |
+| `ALERT_SMTP_USER` / `ALERT_SMTP_PASSWORD` | No | — | SMTP login, if the server needs one |
+| `ALERT_EMAIL_FROM` | No | `ALERT_SMTP_USER` | Sender address |
+| `ALERT_EMAIL_TO` | With SMTP | — | Recipient(s), comma-separated |
+| `ALERT_KINDS` | No | all | Comma-separated subset of `no_data,frost,wind,lightning,rain,battery` |
+| `ALERT_NO_DATA_MINUTES` | No | `15` | Minutes without a new observation before a no-data alert |
+| `ALERT_FROST_TEMPERATURE` | No | `32` °F / `0` °C | Frost alert at or below this temperature |
+| `ALERT_WIND_GUST` | No | `40` mph / `18` m/s | High-wind alert at or above this gust |
+| `ALERT_LIGHTNING_DISTANCE` | No | `10` mi / `16` km | Lightning alert for a strike this close or closer |
+| `ALERT_BATTERY_VOLTAGE` | No | `2.40` | Low-battery alert at or below this voltage (UDP only) |
+| `ALERT_COOLDOWN_MINUTES` | No | `60` | Minimum time between two alerts of the same kind (not applied to no-data) |
+| `ALERT_STATION_NAME` | No | station name from Tempest | Name used in alert text |
 
 ## Running locally
 
@@ -124,6 +141,7 @@ survives container restarts/rebuilds.
 | `GET /api/forecast` | none | cached hourly/daily forecast |
 | `GET /api/station-health` | none | battery/signal/uptime/firmware, only populated when `TEMPEST_UDP_ENABLED=true` |
 | `GET /api/capabilities` | none | `{"cloud_configured": bool, "udp_configured": bool, "units": {...}, "timezone": "America/Denver"}` - which data source(s) are active, the display labels for the configured `TEMPEST_UNITS` (see below), and the station timezone daily history uses |
+| `GET /api/alerts?limit=` | none | `{"enabled": bool, "alerts": [...]}` - most recent alerts first (default 50, max 200), see [Alerts](#alerts-optional) |
 | `/`, `/history.html`, ... | none | the site itself |
 
 `units` in `/api/capabilities` is
@@ -314,6 +332,84 @@ automatically:
   and only adds its cloud-only fields. If UDP goes quiet, cloud values take
   over as normal. The raw-resolution charts likewise skip older cloud rows'
   readings of those fields wherever UDP readings sit within 5 minutes.
+
+### Alerts (optional)
+
+Off unless a destination is configured: set `ALERT_WEBHOOK_URL`, or
+`ALERT_SMTP_HOST` + `ALERT_EMAIL_TO`, or both. Alerting runs in its own
+threads, only ever reads the caches, and never writes observations, so a
+slow or broken destination can't hold up data collection; a bad `ALERT_*`
+value disables alerting (logged) rather than stopping the service.
+
+| Kind | Fires when | Re-arms when |
+|---|---|---|
+| `no_data` | no new observation for `ALERT_NO_DATA_MINUTES` (default 15) - counted from the service start if nothing has arrived since | a new observation arrives, which also sends a "data resumed" notice |
+| `frost` | temperature at or below `ALERT_FROST_TEMPERATURE` | it rises 2 °F / 1 °C above the threshold |
+| `wind` | gust at or above `ALERT_WIND_GUST` | gusts drop 10 mph / 4.5 m/s below the threshold |
+| `lightning` | a strike at or within `ALERT_LIGHTNING_DISTANCE` | 30 minutes pass with no strike that close |
+| `rain` | rain starts | 60 minutes pass with no rain |
+| `battery` | Tempest battery at or below `ALERT_BATTERY_VOLTAGE` (UDP `device_status`, so UDP only) | it recovers 0.05 V above the threshold |
+
+Each kind fires once when its condition begins. After it re-arms, another
+alert of the same kind is held back until `ALERT_COOLDOWN_MINUTES` (default
+60) have passed since the last one - an episode that starts inside the
+cooldown is tracked but not announced. `no_data` is exempt from the cooldown
+(each outage already needs a recovery in between). Thresholds are in the
+`TEMPEST_UNITS` system. Pick kinds with `ALERT_KINDS`, e.g.
+`ALERT_KINDS=no_data,frost`.
+
+With UDP enabled, lightning and rain alerts are instant: the listener hands
+`evt_strike`, `evt_precip` and `obs_st` messages (after the
+`TEMPEST_HUB_SERIAL` filter) straight to the alert evaluator. From the cloud
+alone they lag by up to `POLL_INTERVAL_SECONDS`: lightning comes from the
+"last strike" time and distance, rain from the day's rain total or rain
+minutes going up between polls. With the cloud only, set
+`ALERT_NO_DATA_MINUTES` comfortably above the poll interval (the cloud's
+observation is itself up to a few minutes old when polled); the default 15
+suits the default 300-second poll.
+
+Alert state and a log of sent alerts are kept in the SQLite database (the
+`alert_state` and `alert_log` tables), so a restart doesn't re-send alerts
+for conditions still in progress. `GET /api/alerts` lists recent alerts
+with a delivery `status` of `sent`, `partial`, `failed` or `pending`.
+
+**Webhook formats** (`ALERT_WEBHOOK_FORMAT`):
+- `json` (default) - a JSON POST that works as-is with Slack incoming
+  webhooks (they read `text`) and Discord webhooks (they read `content`,
+  capped at Discord's 2000 characters), with structured fields for
+  anything else:
+  ```json
+  {"text": "Frost alert for Tower 1\nTemperature is 31.5°F, at or below the 32°F frost threshold.",
+   "content": "(same as text)", "kind": "frost", "title": "Frost alert for Tower 1",
+   "message": "Temperature is 31.5°F, at or below the 32°F frost threshold.",
+   "station": "Tower 1", "time": 1794714059,
+   "values": {"air_temperature": 31.5, "threshold": 32.0, "unit": "°F"}}
+  ```
+  `kind` is one of the kinds above, `data_resumed`, or `test`; `time` is a
+  unix timestamp.
+- `ntfy` - for an [ntfy](https://ntfy.sh) topic URL such as
+  `https://ntfy.sh/your-topic`: the message as a plain-text body, plus
+  `Title`, `Priority` (4 for no-data/frost/wind/lightning, 3 otherwise) and
+  `Tags` headers. Set `ALERT_WEBHOOK_TOKEN` for a protected topic.
+
+Failed deliveries are retried twice (after 10 s, then 60 s) and then given
+up on; every request has a timeout. The logs show webhook URLs only as
+`scheme://host/...` (they usually embed a secret) and never show the SMTP
+password.
+
+**Sending a test alert** once configured:
+
+```bash
+python scripts/send_test_alert.py
+docker compose exec weather-hub python scripts/send_test_alert.py
+```
+
+It sends one alert to each destination (no retries), prints the outcome,
+records it in the alert log, and exits non-zero if anything failed.
+
+The no-data alert runs inside this service, so it can't report the service
+itself being down or the host being off - pair it with an external uptime
+check on `/healthz` if that matters to you.
 
 ### Embedding a widget
 

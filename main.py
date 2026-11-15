@@ -32,6 +32,9 @@ Optional env vars:
                            the station, remembered across restarts; UTC if
                            neither is known). An invalid name is logged and
                            ignored
+  ALERT_*                  optional alerting (webhook and/or email) - off
+                           unless ALERT_WEBHOOK_URL or ALERT_SMTP_HOST is
+                           set; see weatherhub/alerts.py and the README
 
 A .env file in the working directory is also loaded automatically (copy
 .env.example to .env and fill in your values). Real environment variables
@@ -47,6 +50,7 @@ import sys
 import threading
 from pathlib import Path
 
+from weatherhub.alerts import start_alerting
 from weatherhub.backfill import start_startup_backfill
 from weatherhub.cache import LatestCache
 from weatherhub.db import init_db
@@ -99,6 +103,16 @@ def main() -> int:
     station_health_cache = LatestCache()
     stop_event = threading.Event()
 
+    alerting = start_alerting(
+        cache,
+        station_health_cache,
+        db_path,
+        unit_system,
+        stop_event,
+        poll_interval_seconds=poll_interval_seconds,
+        udp_enabled=udp_enabled,
+    )
+
     if cloud_configured:
         # Before the poller starts, so it sees the newest row from before startup.
         start_startup_backfill(db_path, station_id, token, unit_system, stop_event)
@@ -135,6 +149,7 @@ def main() -> int:
                 unit_system,
                 stop_event,
             ),
+            kwargs={"event_queue": alerting.event_queue if alerting else None},
             daemon=True,
         )
         udp_thread.start()
@@ -150,6 +165,7 @@ def main() -> int:
         udp_enabled,
         unit_system=unit_system,
         station_timezone=station_timezone,
+        alerts_enabled=alerting is not None,
     )
 
     def handle_shutdown(signum: int, frame: object) -> None:

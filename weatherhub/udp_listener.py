@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
 import socket
 import threading
 from typing import Any
@@ -73,6 +74,10 @@ UDP_SENSOR_FIELDS = (
     "uv",
     "solar_radiation",
 )
+
+# Message types forwarded to the alert evaluator (see weatherhub/alerts.py)
+# when listen_forever is given an event_queue.
+ALERT_EVENT_TYPES = frozenset({"evt_strike", "evt_precip", "obs_st"})
 
 
 def _c_to_f(celsius: float) -> float:
@@ -180,6 +185,7 @@ def listen_forever(
     hub_serial: str,
     unit_system: str,
     stop_event: threading.Event,
+    event_queue: queue.Queue[Any] | None = None,
 ) -> None:
     """Listen for Tempest local UDP broadcasts and freshen the current +
     station-health caches, and append obs_st observations to history.
@@ -187,6 +193,10 @@ def listen_forever(
     hub_serial, if non-empty, filters to only that hub's messages - useful
     if more than one Tempest hub could ever be on the same network. Runs
     until stop_event is set.
+
+    event_queue, if given, also receives the raw ALERT_EVENT_TYPES messages
+    (after the hub filter) for the alert evaluator. Never blocks: if the
+    queue is full the message is just not forwarded.
     """
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -214,6 +224,12 @@ def listen_forever(
                 continue
 
             msg_type = message.get("type")
+            if event_queue is not None and msg_type in ALERT_EVENT_TYPES:
+                try:
+                    event_queue.put_nowait(message)
+                except queue.Full:
+                    pass
+
             if msg_type == "obs_st":
                 parsed = parse_obs_st(message, unit_system)
                 if parsed is not None:

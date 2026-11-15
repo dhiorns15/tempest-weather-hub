@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from .alert_store import recent_alerts
 from .api_keys import verify_key
 from .cache import LatestCache
 from .db import history_columns, query_history
@@ -58,6 +59,7 @@ def make_handler(
     udp_configured: bool,
     unit_system: str = "imperial",
     station_timezone: StationTimezone | None = None,
+    alerts_enabled: bool = False,
 ) -> type[BaseHTTPRequestHandler]:
     static_dir = static_dir.resolve()
     units = display_units(unit_system)
@@ -258,6 +260,17 @@ def make_handler(
                 self._write_json(200, snapshot)
                 return
 
+            if path == "/api/alerts":
+                try:
+                    limit = min(max(int(query.get("limit", ["50"])[0]), 1), 200)
+                except ValueError:
+                    self._write_json(400, {"error": "limit must be an integer"})
+                    return
+                self._write_json(
+                    200, {"enabled": alerts_enabled, "alerts": recent_alerts(db_path, limit)}
+                )
+                return
+
             if path == "/api/history":
                 token = self._bearer_token()
                 if token is None or not verify_key(db_path, token):
@@ -332,6 +345,7 @@ def make_server(
     udp_configured: bool = False,
     unit_system: str = "imperial",
     station_timezone: StationTimezone | None = None,
+    alerts_enabled: bool = False,
 ) -> ThreadingHTTPServer:
     handler_cls = make_handler(
         cache,
@@ -343,5 +357,6 @@ def make_server(
         udp_configured,
         unit_system=unit_system,
         station_timezone=station_timezone,
+        alerts_enabled=alerts_enabled,
     )
     return ThreadingHTTPServer(("0.0.0.0", port), handler_cls)  # noqa: S104
