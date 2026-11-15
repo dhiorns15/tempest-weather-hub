@@ -520,7 +520,7 @@ const TIME_STEPS = [
   90 * DAY_MS,
 ];
 
-// A line is only drawn across a hole in the data up to this wide. Wider
+// A line is only drawn between two readings up to this far apart. Further
 // than that is treated as a real gap (station/service was down). Raw allows
 // for cloud-only fields arriving every few minutes between UDP rows.
 const MAX_GAP_MS = {
@@ -616,7 +616,7 @@ function buildChartOptions(def) {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
-    interaction: { mode: "index", intersect: false },
+    interaction: { mode: "nearestPerSeries", intersect: false },
     plugins: {
       // A single series is already named by the card title.
       legend: {
@@ -706,6 +706,58 @@ function buildChartOptions(def) {
   };
 }
 
+// One series' real readings as {x: ms, y} points, oldest first.
+function seriesPoints(rows, timestamps, resolution, series) {
+  const points = [];
+  rows.forEach((row, i) => {
+    const y = fieldValue(row, resolution, series.raw, series.agg);
+    if (y != null) points.push({ x: timestamps[i], y });
+  });
+  return points;
+}
+
+// Index of the point closest in time to `x`, in points sorted by x.
+function nearestPointIndex(points, x) {
+  let lo = 0;
+  let hi = points.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid].x < x) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0 && x - points[lo - 1].x <= points[lo].x - x) return lo - 1;
+  return lo;
+}
+
+// Series in one chart have readings at different times (see seriesPoints),
+// so the built-in "index" mode would pair up unrelated instants. This picks,
+// for the hovered time, each series' closest reading - unless the pointer is
+// in a hole in that series' data, where there is nothing honest to show.
+function nearestPerSeries(chart, event) {
+  const position = Chart.helpers.getRelativePosition(event, chart);
+  const area = chart.chartArea;
+  const inArea =
+    position.x >= area.left &&
+    position.x <= area.right &&
+    position.y >= area.top &&
+    position.y <= area.bottom;
+  if (!inArea) return [];
+
+  const x = chart.scales.x.getValueForPixel(position.x);
+  const reach = MAX_GAP_MS[chart.$resolution] / 2;
+  const items = [];
+  chart.getSortedVisibleDatasetMetas().forEach((meta) => {
+    const points = chart.data.datasets[meta.index].data;
+    if (!points.length) return;
+    const index = nearestPointIndex(points, x);
+    const element = meta.data[index];
+    if (element && Math.abs(points[index].x - x) <= reach) {
+      items.push({ element, datasetIndex: meta.index, index });
+    }
+  });
+  return items;
+}
+
 // chartsStore is a plain {} the caller owns (one per page) mapping chart key
 // -> Chart.js instance, so repeated refreshes update in place instead of
 // creating a new chart each time.
@@ -717,13 +769,13 @@ function renderChart(chartsStore, def, timestamps, rows, resolution) {
   const datasets = series.map((s, slot) => ({
     label: s.label,
     seriesSlot: slot,
-    data: rows.map((row, i) => ({
-      x: timestamps[i],
-      y: fieldValue(row, resolution, s.raw, s.agg) ?? null,
-    })),
     // Cloud-only fields are null on UDP-sourced rows (and vice versa for
-    // wind_lull), so at raw resolution most points of a given series can be
-    // null. Bridge those, but not a genuinely long hole in the data.
+    // wind_lull), so at raw resolution most rows have no value for a given
+    // series. Keep only the rows that do: Chart.js breaks a line at every
+    // null point, and a numeric spanGaps only bridges the distance between
+    // neighbouring points - it does not skip over nulls sitting between them.
+    data: seriesPoints(rows, timestamps, resolution, s),
+    // Join readings up to this far apart; leave a longer hole as a gap.
     spanGaps: MAX_GAP_MS[resolution],
     borderWidth: 2,
     borderJoinStyle: "round",
@@ -737,9 +789,7 @@ function renderChart(chartsStore, def, timestamps, rows, resolution) {
   const latestEl = document.getElementById(`chart-latest-${def.key}`);
   if (latestEl) {
     const lead = datasets[0].data;
-    let latest = null;
-    for (let i = lead.length - 1; i >= 0 && latest == null; i--) latest = lead[i].y;
-    latestEl.textContent = latest == null ? "" : formatChartValue(latest, def);
+    latestEl.textContent = lead.length ? formatChartValue(lead[lead.length - 1].y, def) : "";
   }
 
   let chart = chartsStore[def.key];
@@ -779,6 +829,7 @@ function renderAllMetricCharts(chartsStore, rows, resolution) {
 
 if (typeof Chart !== "undefined") {
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.Interaction.modes.nearestPerSeries = nearestPerSeries;
 }
 
 // Paint the last-seen sky straight away so the page doesn't flash the
