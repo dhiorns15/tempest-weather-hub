@@ -173,7 +173,7 @@ class TestServer(unittest.TestCase):
         with urllib.request.urlopen(url, timeout=5) as response:  # noqa: S310
             body = response.read().decode("utf-8")
 
-        self.assertIn("#1d2025", body)
+        self.assertIn("#f1f5fb", body)  # dark theme's --text token
 
 
 class TestServerHistory(unittest.TestCase):
@@ -396,7 +396,8 @@ class TestServerCapabilities(unittest.TestCase):
         status, body = self._get(port, "/api/capabilities")
 
         self.assertEqual(status, 200)
-        self.assertEqual(body, {"cloud_configured": True, "udp_configured": True})
+        self.assertEqual(body["cloud_configured"], True)
+        self.assertEqual(body["udp_configured"], True)
 
     def test_capabilities_reflects_udp_only(self) -> None:
         port = self._make_server(cloud_configured=False, udp_configured=True)
@@ -404,7 +405,8 @@ class TestServerCapabilities(unittest.TestCase):
         status, body = self._get(port, "/api/capabilities")
 
         self.assertEqual(status, 200)
-        self.assertEqual(body, {"cloud_configured": False, "udp_configured": True})
+        self.assertEqual(body["cloud_configured"], False)
+        self.assertEqual(body["udp_configured"], True)
 
     def test_kiosk_weather_disabled_when_cloud_not_configured(self) -> None:
         port = self._make_server(cloud_configured=False, udp_configured=True)

@@ -44,7 +44,7 @@ adapts automatically - see [Running with only one data source](#running-with-onl
 |---|---|---|---|
 | `TEMPEST_STATION_ID` | One of this pair, or UDP | — | Your Tempest station ID |
 | `TEMPEST_TOKEN` | One of this pair, or UDP | — | Tempest personal access token — generate one at [tempestwx.com/settings/tokens](https://tempestwx.com/settings/tokens) |
-| `TEMPEST_UNITS` | No | `imperial` | `metric` or `imperial` |
+| `TEMPEST_UNITS` | No | `imperial` | `metric` (°C, m/s, mb, mm, km) or `imperial` (°F, mph, inHg, in, mi); any other value is treated as `imperial`. The site and widget label everything to match. History is stored in whatever units were active when each row was written and is not converted if you switch later |
 | `PORT` | No | `8080` | HTTP port to listen on |
 | `POLL_INTERVAL_SECONDS` | No | `300` | Seconds between Tempest polls |
 | `DB_PATH` | No | `data/weather.db` | Path to the SQLite history file |
@@ -118,12 +118,21 @@ survives container restarts/rebuilds.
 | `GET /healthz` | none | liveness check |
 | `GET /api/current` | none | latest cached observation |
 | `GET /api/history?start=&end=&resolution=&format=&download=` | API key | raw/hourly/daily observations, as JSON or CSV |
-| `GET /widget/current?theme=light\|dark` | none | embeddable HTML widget |
+| `GET /widget/current?theme=light\|dark\|auto` | none | embeddable HTML widget (see [Embedding a widget](#embedding-a-widget)) |
 | `GET /kiosk/weather` | none | OpenWeatherMap-shaped output for Immich Kiosk's `custom_weather_url`, in whatever units `TEMPEST_UNITS` is set to (see note below) |
 | `GET /api/forecast` | none | cached hourly/daily forecast |
 | `GET /api/station-health` | none | battery/signal/uptime/firmware, only populated when `TEMPEST_UDP_ENABLED=true` |
-| `GET /api/capabilities` | none | `{"cloud_configured": bool, "udp_configured": bool}` - which data source(s) are active |
+| `GET /api/capabilities` | none | `{"cloud_configured": bool, "udp_configured": bool, "units": {...}}` - which data source(s) are active, and the display labels for the configured `TEMPEST_UNITS` (see below) |
 | `/`, `/history.html`, ... | none | the site itself |
+
+`units` in `/api/capabilities` is
+`{"system": "imperial", "temp": "°F", "wind": "mph", "pressure": "inHg", "precip": "in", "distance": "mi"}`
+or, with `TEMPEST_UNITS=metric`,
+`{"system": "metric", "temp": "°C", "wind": "m/s", "pressure": "mb", "precip": "mm", "distance": "km"}`.
+It's the one source of truth for unit labels: the site reads it on load
+(falling back to imperial if the request fails), and the widget uses the
+same table server-side. Unitless and fixed-unit values (humidity, UV, W/m²,
+lux, kg/m³, minutes) don't depend on it.
 
 **Kiosk unit mismatch:** Immich Kiosk's `custom_weather_url` fetcher does not
 send a `units=` query param or convert values for custom providers — it only
@@ -270,8 +279,9 @@ strength, uptime, firmware).
 Neither source is required on its own - `TEMPEST_STATION_ID`/`TEMPEST_TOKEN`
 and `TEMPEST_UDP_ENABLED` are each independently sufficient, and the app
 refuses to start only if **neither** is configured. `GET /api/capabilities`
-reports which are active (`{"cloud_configured": bool, "udp_configured": bool}`),
-and the site/API adapt automatically:
+reports which are active (`"cloud_configured"`/`"udp_configured"`, alongside
+the `units` labels described under [API](#api)), and the site/API adapt
+automatically:
 
 - **Cloud only** (UDP off): everything works as if UDP never existed -
   forecast, Kiosk output, all metrics, the Station Health panel just stays
@@ -297,10 +307,30 @@ and the site/API adapt automatically:
 
 ```html
 <iframe
-  src="http://your-host:8080/widget/current?theme=light"
-  width="260" height="70" style="border:none;">
+  src="http://your-host:8080/widget/current?theme=auto"
+  width="300" height="90" style="border:none;" title="Current weather">
 </iframe>
 ```
+
+A compact card in the site's style: the same weather icon as the site, the
+temperature with its unit (`TEMPEST_UNITS`), the conditions text, and a line
+of secondary readings (feels-like, wind, humidity).
+
+- **Size:** designed for 200-400 px wide and about 90 px tall. Narrower
+  frames drop secondary readings from the end rather than squeezing them; in
+  a frame under about 80 px tall the secondary line is left out entirely.
+- **`theme`:** `light` (default), `dark`, or `auto` to follow the viewer's
+  light/dark preference (`prefers-color-scheme`). The corners outside the
+  rounded card are transparent, so it sits on any page background.
+- **Self-contained:** one HTML document with inline CSS and JS and no
+  requests of its own. The icon artwork is `static/js/icons.js` inlined at
+  render time, so it always matches the site; if the frame blocks scripts
+  (`sandbox` without `allow-scripts`) everything but the icon still shows.
+- **Missing data:** before the first reading it shows `--` and "Waiting for
+  data…". UDP-only setups have no icon or conditions text, so the widget
+  shows the temperature and secondary line without them.
+- It renders the latest reading when loaded and doesn't refresh itself;
+  reload the frame if you need it live.
 
 ## Tracked metrics
 
@@ -366,7 +396,6 @@ Not yet built (ideas from the original plan, pick up if interesting):
   "rain in the last minute" vs. a running daily total) than the REST-sourced
   fields of the same general subject.
 - Only a single `/widget/current` style exists so far (see backlog).
-- Widget rendering has only been verified via direct HTTP requests (curl),
-  not visually in a real browser `<iframe>` — this environment has no
-  browser/screenshot tooling available. Worth a manual look before relying
-  on it for a real embed.
+- The widget has been checked in `<iframe>`s in headless Chromium (Playwright
+  1.49.1) at 200-400 px wide, in all three themes, with both OS colour
+  schemes. It hasn't been checked in Firefox or Safari.

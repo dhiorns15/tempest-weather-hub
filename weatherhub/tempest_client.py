@@ -29,6 +29,37 @@ _UNITS_BY_SYSTEM = {
     },
 }
 
+# How the values requested above are labelled for display (site, widget,
+# /api/capabilities). Keep the two tables in step: a label here must name
+# the unit Tempest actually returns for the matching request above.
+_DISPLAY_UNITS_BY_SYSTEM = {
+    "imperial": {
+        "temp": "°F",
+        "wind": "mph",
+        "pressure": "inHg",
+        "precip": "in",
+        "distance": "mi",
+    },
+    "metric": {
+        "temp": "°C",
+        "wind": "m/s",
+        "pressure": "mb",
+        "precip": "mm",
+        "distance": "km",
+    },
+}
+
+
+def display_units(unit_system: str) -> dict[str, str]:
+    """Display labels for the units data is stored and served in.
+
+    Anything other than "metric" is treated as imperial, matching what
+    fetch_tempest requests and what the UDP listener converts to, so the
+    labels always agree with the numbers.
+    """
+    system = unit_system if unit_system in _DISPLAY_UNITS_BY_SYSTEM else "imperial"
+    return {"system": system, **_DISPLAY_UNITS_BY_SYSTEM[system]}
+
 
 class TempestError(Exception):
     """Raised when the Tempest API returns a non-2xx response or bad data."""

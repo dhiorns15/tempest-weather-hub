@@ -138,6 +138,7 @@ def main() -> int:
         port,
         cloud_configured,
         udp_enabled,
+        unit_system=unit_system,
     )
 
     def handle_shutdown(signum: int, frame: object) -> None:

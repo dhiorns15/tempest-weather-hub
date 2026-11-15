@@ -35,7 +35,7 @@ function renderStats(rows, resolution) {
     ? `${Math.round(avgs.reduce((a, b) => a + b, 0) / avgs.length)}°`
     : "—";
   document.getElementById("stat-gust").innerHTML = gusts.length
-    ? `${Math.round(Math.max(...gusts))} <span class="tile-unit">mph</span>`
+    ? `${formatReading(Math.max(...gusts), "wind")} <span class="tile-unit">${UNITS.wind}</span>`
     : "—";
 }
 

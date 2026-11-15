@@ -124,15 +124,19 @@ function renderWind(data) {
     return;
   }
 
-  const speed = Math.round(data.wind_avg);
+  const speed = formatReading(data.wind_avg, "wind");
+  const calm = Number(speed) === 0;
   const direction = degreesToCompass(data.wind_direction);
   document.getElementById("stat-wind").innerHTML =
-    speed === 0 ? "Calm" : `${valueWithUnit(speed, "mph")} ${direction}`;
-  setText("stat-gust", data.wind_gust != null ? `Gusts ${Math.round(data.wind_gust)} mph` : "");
+    calm ? "Calm" : `${valueWithUnit(speed, UNITS.wind)} ${direction}`;
+  setText(
+    "stat-gust",
+    data.wind_gust != null ? `Gusts ${formatReading(data.wind_gust, "wind")} ${UNITS.wind}` : ""
+  );
 
   // No meaningful bearing when it's calm. (An SVG element has no .hidden
   // property, hence the attribute.)
-  const hasBearing = speed > 0 && data.wind_direction != null;
+  const hasBearing = !calm && data.wind_direction != null;
   needle.toggleAttribute("hidden", !hasBearing);
   if (hasBearing) needle.style.transform = `rotate(${data.wind_direction}deg)`;
 }
@@ -166,7 +170,7 @@ function renderCurrent(data) {
 
   document.getElementById("stat-pressure").innerHTML =
     data.station_pressure != null
-      ? valueWithUnit(data.station_pressure.toFixed(2), "inHg")
+      ? valueWithUnit(formatReading(data.station_pressure, "pressure"), UNITS.pressure)
       : DASH;
   setText("stat-pressure-trend", PRESSURE_TRENDS[data.pressure_trend] || "");
 
@@ -192,19 +196,21 @@ function renderCurrent(data) {
 
   document.getElementById("stat-rain").innerHTML =
     data.precip_accum_local_day != null
-      ? valueWithUnit(data.precip_accum_local_day.toFixed(2), "in")
+      ? valueWithUnit(formatReading(data.precip_accum_local_day, "precip"), UNITS.precip)
       : DASH;
   setText(
     "stat-rain-yesterday",
     data.precip_accum_local_yesterday != null
-      ? `Yesterday ${data.precip_accum_local_yesterday.toFixed(2)} in`
+      ? `Yesterday ${formatReading(data.precip_accum_local_yesterday, "precip")} ${UNITS.precip}`
       : ""
   );
 
   if (data.lightning_strike_last_epoch) {
+    // Tempest words the message in the requested distance unit itself.
     setText(
       "stat-lightning",
-      data.lightning_strike_last_distance_msg || `${data.lightning_strike_last_distance} mi`
+      data.lightning_strike_last_distance_msg ||
+        `${data.lightning_strike_last_distance} ${UNITS.distance}`
     );
     setText("stat-lightning-when", formatRelativeTime(data.lightning_strike_last_epoch));
   } else {

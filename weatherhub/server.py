@@ -24,7 +24,8 @@ from .api_keys import verify_key
 from .cache import LatestCache
 from .db import history_columns, query_history
 from .kiosk_mapping import build_kiosk_response
-from .widgets import render_current_widget
+from .tempest_client import display_units
+from .widgets import load_icons_js, render_current_widget
 
 logger = logging.getLogger("weatherhub")
 
@@ -54,8 +55,10 @@ def make_handler(
     static_dir: Path,
     cloud_configured: bool,
     udp_configured: bool,
+    unit_system: str = "imperial",
 ) -> type[BaseHTTPRequestHandler]:
     static_dir = static_dir.resolve()
+    units = display_units(unit_system)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
@@ -198,7 +201,12 @@ def make_handler(
 
             if path == "/api/capabilities":
                 self._write_json(
-                    200, {"cloud_configured": cloud_configured, "udp_configured": udp_configured}
+                    200,
+                    {
+                        "cloud_configured": cloud_configured,
+                        "udp_configured": udp_configured,
+                        "units": units,
+                    },
                 )
                 return
 
@@ -281,9 +289,14 @@ def make_handler(
 
             if path == "/widget/current":
                 theme = query.get("theme", ["light"])[0]
-                if theme not in ("light", "dark"):
+                if theme not in ("light", "dark", "auto"):
                     theme = "light"
-                self._write_html(200, render_current_widget(cache.get(), theme))
+                self._write_html(
+                    200,
+                    render_current_widget(
+                        cache.get(), theme, units, load_icons_js(static_dir)
+                    ),
+                )
                 return
 
             resolved = _resolve_static_path(static_dir, path)
@@ -304,6 +317,7 @@ def make_server(
     port: int,
     cloud_configured: bool,
     udp_configured: bool = False,
+    unit_system: str = "imperial",
 ) -> ThreadingHTTPServer:
     handler_cls = make_handler(
         cache,
@@ -313,5 +327,6 @@ def make_server(
         static_dir,
         cloud_configured,
         udp_configured,
+        unit_system=unit_system,
     )
     return ThreadingHTTPServer(("0.0.0.0", port), handler_cls)  # noqa: S104

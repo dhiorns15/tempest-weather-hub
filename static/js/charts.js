@@ -85,6 +85,37 @@ async function loadCapabilities() {
   } catch (err) {
     // keep the permissive defaults above
   }
+  if (CAPABILITIES.units) setUnits(CAPABILITIES.units);
+}
+
+// Display labels for the units the API's numbers are in (TEMPEST_UNITS on
+// the server), from /api/capabilities. Imperial - the server's default -
+// until that arrives, or if it fails.
+let UNITS = {
+  system: "imperial",
+  temp: "°F",
+  wind: "mph",
+  pressure: "inHg",
+  precip: "in",
+  distance: "mi",
+};
+
+// Decimal places for a current-conditions reading, per unit system: whole
+// mph is plenty but whole m/s is too coarse, and inHg needs two places where
+// mb needs none.
+const READING_DECIMALS = {
+  imperial: { wind: 0, pressure: 2, precip: 2 },
+  metric: { wind: 1, pressure: 0, precip: 1 },
+};
+
+function setUnits(units) {
+  UNITS = { ...UNITS, ...units };
+  applyChartUnits();
+}
+
+function formatReading(value, quantity) {
+  const decimals = (READING_DECIMALS[UNITS.system] || READING_DECIMALS.imperial)[quantity];
+  return value.toFixed(decimals);
 }
 
 // ---------------------------------------------------------------------------
@@ -187,14 +218,20 @@ const crosshairPlugin = {
 // minSpan: the smallest y-range the chart will zoom in to, so a value that
 //   barely moved doesn't get stretched into a dramatic-looking swing.
 // floor/ceil: hard limits the padded y-range never crosses.
+// quantity: for a value in a unit-system-dependent unit (temp, wind,
+//   pressure, precip, distance), which UNITS label it takes - in place of a
+//   fixed `unit`. Its decimals/minSpan are for imperial; `metric` overrides
+//   them (see applyChartUnits).
+// grouping: false to print 1014 rather than 1,014 (pressure in mb).
 const CHARTS = [
   {
     key: "temperature",
     title: "Temperature",
-    unit: "°",
+    quantity: "temp",
     tickSuffix: "°",
     decimals: 1,
     minSpan: 4,
+    metric: { minSpan: 2 },
     series: [
       { label: "Temperature", raw: "air_temperature", agg: "air_temperature_avg", source: "both" },
       { label: "Feels like", raw: "feels_like", agg: "feels_like_avg", source: "cloud" },
@@ -217,9 +254,10 @@ const CHARTS = [
   {
     key: "wind",
     title: "Wind",
-    unit: " mph",
+    quantity: "wind",
     decimals: 1,
     minSpan: 5,
+    metric: { minSpan: 2 },
     floor: 0,
     series: [
       { label: "Average", raw: "wind_avg", agg: "wind_avg_avg", source: "both" },
@@ -230,9 +268,10 @@ const CHARTS = [
   {
     key: "pressure",
     title: "Station Pressure",
-    unit: " inHg",
+    quantity: "pressure",
     decimals: 2,
     minSpan: 0.1,
+    metric: { decimals: 0, minSpan: 3, grouping: false },
     series: [
       { label: "Station pressure", raw: "station_pressure", agg: "station_pressure_avg", source: "both" },
     ],
@@ -260,9 +299,10 @@ const CHARTS = [
   {
     key: "precip",
     title: "Rain Accumulation",
-    unit: " in",
+    quantity: "precip",
     decimals: 2,
     minSpan: 0.1,
+    metric: { decimals: 1, minSpan: 2.5 },
     floor: 0,
     series: [
       { label: "Today", raw: "precip_accum_local_day", agg: "precip_accum_local_day_max", source: "cloud" },
@@ -312,9 +352,10 @@ const CHARTS = [
   {
     key: "lightningDistance",
     title: "Nearest Lightning Strike",
-    unit: " mi",
+    quantity: "distance",
     decimals: 0,
     minSpan: 10,
+    metric: { minSpan: 15 },
     floor: 0,
     series: [
       {
@@ -328,9 +369,10 @@ const CHARTS = [
   {
     key: "seaLevelPressure",
     title: "Sea Level Pressure",
-    unit: " inHg",
+    quantity: "pressure",
     decimals: 2,
     minSpan: 0.1,
+    metric: { decimals: 0, minSpan: 3, grouping: false },
     series: [
       { label: "Sea level pressure", raw: "sea_level_pressure", agg: "sea_level_pressure_avg", source: "cloud" },
     ],
@@ -365,10 +407,11 @@ const CHARTS = [
   {
     key: "wetBulb",
     title: "Wet Bulb Temperature",
-    unit: "°",
+    quantity: "temp",
     tickSuffix: "°",
     decimals: 1,
     minSpan: 4,
+    metric: { minSpan: 2 },
     series: [
       { label: "Wet bulb", raw: "wet_bulb_temperature", agg: "wet_bulb_temperature_avg", source: "cloud" },
       {
@@ -390,15 +433,32 @@ const CHARTS = [
   {
     key: "deltaT",
     title: "Delta T",
-    unit: "°",
+    quantity: "temp",
     tickSuffix: "°",
     decimals: 1,
     minSpan: 2,
+    metric: { minSpan: 1 },
     series: [{ label: "Delta T", raw: "delta_t", agg: "delta_t_avg", source: "cloud" }],
   },
 ];
 
 const CHARTS_BY_KEY = Object.fromEntries(CHARTS.map((def) => [def.key, def]));
+
+// Fills in `unit` and the tuning for the current UNITS on every chart with
+// a quantity. Safe to run again: the imperial values of whatever `metric`
+// overrides are kept aside the first time, so switching back restores them.
+function applyChartUnits() {
+  CHARTS.forEach((def) => {
+    if (!def.quantity) return;
+    def.imperial =
+      def.imperial || Object.fromEntries(Object.keys(def.metric).map((key) => [key, def[key]]));
+    Object.assign(def, UNITS.system === "metric" ? def.metric : def.imperial);
+    // "21.4°C", but "12 mph".
+    def.unit = def.quantity === "temp" ? UNITS.temp : ` ${UNITS[def.quantity]}`;
+  });
+}
+
+applyChartUnits();
 
 // Which charts appear where. The first group is always visible; the rest
 // are collapsed by default (open/closed is remembered per browser).
@@ -603,6 +663,7 @@ function formatChartValue(value, def) {
   const text = value.toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: def.decimals,
+    useGrouping: def.grouping !== false,
   });
   return `${text}${def.unit}`;
 }
@@ -672,7 +733,11 @@ function buildChartOptions(def) {
         ticks: {
           maxTicksLimit: 5,
           font: { size: 11 },
-          format: def.compactTicks ? { notation: "compact" } : undefined,
+          format: def.compactTicks
+            ? { notation: "compact" }
+            : def.grouping === false
+              ? { useGrouping: false }
+              : undefined,
           callback(value, index, ticks) {
             const text = Chart.Ticks.formatters.numeric.call(this, value, index, ticks);
             return def.tickSuffix ? `${text}${def.tickSuffix}` : text;
