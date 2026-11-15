@@ -398,6 +398,7 @@ class TestServerCapabilities(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["cloud_configured"], True)
         self.assertEqual(body["udp_configured"], True)
+        self.assertEqual(body["timezone"], "UTC")
 
     def test_capabilities_reflects_udp_only(self) -> None:
         port = self._make_server(cloud_configured=False, udp_configured=True)
@@ -407,6 +408,7 @@ class TestServerCapabilities(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["cloud_configured"], False)
         self.assertEqual(body["udp_configured"], True)
+        self.assertEqual(body["timezone"], "UTC")
 
     def test_kiosk_weather_disabled_when_cloud_not_configured(self) -> None:
         port = self._make_server(cloud_configured=False, udp_configured=True)

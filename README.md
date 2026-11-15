@@ -54,6 +54,7 @@ adapts automatically - see [Running with only one data source](#running-with-onl
 | `TEMPEST_HUB_SERIAL` | No | — | Optional `hub_sn` filter (e.g. `HB-00118618`); blank accepts any hub heard |
 | `BACKFILL_ON_STARTUP` | No | `true` | `false` to stop the service from filling history it missed while it was down (cloud source only - see [Backfilling missing history](#backfilling-missing-history)) |
 | `BACKFILL_MAX_DAYS` | No | `30` | How far back the startup catch-up reaches |
+| `STATION_TIMEZONE` | No | cloud-reported, else `UTC` | IANA timezone name (e.g. `America/Denver`) whose calendar days the daily history buckets follow. Normally unnecessary: the timezone Tempest's cloud reports for the station is used and remembered across restarts. Set it for UDP-only setups, or to override. An invalid name is logged and ignored |
 
 ## Running locally
 
@@ -122,7 +123,7 @@ survives container restarts/rebuilds.
 | `GET /kiosk/weather` | none | OpenWeatherMap-shaped output for Immich Kiosk's `custom_weather_url`, in whatever units `TEMPEST_UNITS` is set to (see note below) |
 | `GET /api/forecast` | none | cached hourly/daily forecast |
 | `GET /api/station-health` | none | battery/signal/uptime/firmware, only populated when `TEMPEST_UDP_ENABLED=true` |
-| `GET /api/capabilities` | none | `{"cloud_configured": bool, "udp_configured": bool, "units": {...}}` - which data source(s) are active, and the display labels for the configured `TEMPEST_UNITS` (see below) |
+| `GET /api/capabilities` | none | `{"cloud_configured": bool, "udp_configured": bool, "units": {...}, "timezone": "America/Denver"}` - which data source(s) are active, the display labels for the configured `TEMPEST_UNITS` (see below), and the station timezone daily history uses |
 | `/`, `/history.html`, ... | none | the site itself |
 
 `units` in `/api/capabilities` is
@@ -154,8 +155,14 @@ same reason.
 
 - `start`, `end` — unix timestamps. Default to the last 24 hours if omitted.
 - `resolution` — `raw` (every polled observation), `hourly`, or `daily`
-  (aggregated via SQL `AVG`/`MIN`/`MAX`, bucketed in UTC). `raw` is capped at
-  a 31-day range — use `hourly`/`daily` for longer spans.
+  (aggregated via SQL `AVG`/`MIN`/`MAX`). `daily` buckets are the station's
+  local calendar days (DST-aware, so the autumn change-over day is 25 hours);
+  each `bucket` is that local date written as `YYYY-MM-DDT00:00:00Z`.
+  `hourly` buckets are UTC hours (`bucket` is a real UTC instant), which are
+  the same as local hours in any whole-hour-offset timezone. JSON responses
+  include a top-level `"timezone"` saying which zone the daily buckets use
+  (see `STATION_TIMEZONE`). `raw` is capped at a 31-day range — use
+  `hourly`/`daily` for longer spans.
 - `format` — `json` (default) or `csv`.
 - `download` — `1` to add a `Content-Disposition: attachment` header so
   browsers save the response as a file instead of rendering it inline. The
@@ -390,8 +397,11 @@ Not yet built (ideas from the original plan, pick up if interesting):
 
 ## Known limitations
 
-- History aggregation (`hourly`/`daily`) buckets in UTC, not the station's
-  local calendar day.
+- `daily` history buckets follow the station's local calendar day, but
+  `hourly` buckets are UTC hours, so in a timezone with a half-hour offset
+  (e.g. India, Newfoundland) each hourly bucket straddles two local hours.
+  UDP-only setups that have never been cloud-connected bucket days in UTC
+  unless `STATION_TIMEZONE` is set.
 - `air_density` and `delta_t` are specialized (aviation/agricultural) metrics
   included for completeness since Tempest reports them, but have limited
   everyday display value.

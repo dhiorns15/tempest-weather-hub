@@ -26,6 +26,12 @@ Optional env vars:
   TEMPEST_HUB_SERIAL       optional hub_sn filter, e.g. "HB-00118618" (see
                            /healthz logs or WeatherFlow app); blank accepts
                            broadcasts from any hub on the network
+  STATION_TIMEZONE         IANA timezone name, e.g. "America/Denver", whose
+                           calendar days the daily history buckets follow
+                           (default: the timezone Tempest's cloud reports for
+                           the station, remembered across restarts; UTC if
+                           neither is known). An invalid name is logged and
+                           ignored
 
 A .env file in the working directory is also loaded automatically (copy
 .env.example to .env and fill in your values). Real environment variables
@@ -47,6 +53,7 @@ from weatherhub.db import init_db
 from weatherhub.dotenv import load_dotenv
 from weatherhub.poller import poll_forever
 from weatherhub.server import make_server
+from weatherhub.station_timezone import StationTimezone
 from weatherhub.udp_listener import listen_forever as udp_listen_forever
 
 logging.basicConfig(
@@ -84,6 +91,8 @@ def main() -> int:
 
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     init_db(db_path)
+    station_timezone = StationTimezone(db_path, os.environ.get("STATION_TIMEZONE", ""))
+    logger.info("Daily history buckets use timezone %s", station_timezone.name)
 
     cache = LatestCache()
     forecast_cache = LatestCache()
@@ -105,6 +114,7 @@ def main() -> int:
                 poll_interval_seconds,
                 stop_event,
             ),
+            kwargs={"station_timezone": station_timezone},
             daemon=True,
         )
         poll_thread.start()
@@ -139,6 +149,7 @@ def main() -> int:
         cloud_configured,
         udp_enabled,
         unit_system=unit_system,
+        station_timezone=station_timezone,
     )
 
     def handle_shutdown(signum: int, frame: object) -> None:

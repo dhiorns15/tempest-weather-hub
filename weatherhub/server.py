@@ -24,6 +24,7 @@ from .api_keys import verify_key
 from .cache import LatestCache
 from .db import history_columns, query_history
 from .kiosk_mapping import build_kiosk_response
+from .station_timezone import DEFAULT_TIMEZONE, StationTimezone
 from .tempest_client import display_units
 from .widgets import load_icons_js, render_current_widget
 
@@ -56,9 +57,13 @@ def make_handler(
     cloud_configured: bool,
     udp_configured: bool,
     unit_system: str = "imperial",
+    station_timezone: StationTimezone | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     static_dir = static_dir.resolve()
     units = display_units(unit_system)
+
+    def timezone_name() -> str:
+        return station_timezone.name if station_timezone is not None else DEFAULT_TIMEZONE
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
@@ -165,7 +170,8 @@ def make_handler(
                 )
                 return
 
-            rows = query_history(db_path, start, end, resolution)
+            tz_name = timezone_name()
+            rows = query_history(db_path, start, end, resolution, tz_name)
 
             disposition = None
             if download:
@@ -178,7 +184,13 @@ def make_handler(
 
             self._write_json(
                 200,
-                {"start": start, "end": end, "resolution": resolution, "observations": rows},
+                {
+                    "start": start,
+                    "end": end,
+                    "resolution": resolution,
+                    "timezone": tz_name,
+                    "observations": rows,
+                },
                 disposition,
             )
 
@@ -206,6 +218,7 @@ def make_handler(
                         "cloud_configured": cloud_configured,
                         "udp_configured": udp_configured,
                         "units": units,
+                        "timezone": timezone_name(),
                     },
                 )
                 return
@@ -318,6 +331,7 @@ def make_server(
     cloud_configured: bool,
     udp_configured: bool = False,
     unit_system: str = "imperial",
+    station_timezone: StationTimezone | None = None,
 ) -> ThreadingHTTPServer:
     handler_cls = make_handler(
         cache,
@@ -328,5 +342,6 @@ def make_server(
         cloud_configured,
         udp_configured,
         unit_system=unit_system,
+        station_timezone=station_timezone,
     )
     return ThreadingHTTPServer(("0.0.0.0", port), handler_cls)  # noqa: S104

@@ -9,7 +9,9 @@ persistent connection or a connection pool.
 from __future__ import annotations
 
 import sqlite3
+from datetime import date, datetime, timedelta
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 _OBSERVATION_FIELDS = (
     "air_temperature",
@@ -60,6 +62,11 @@ CREATE TABLE IF NOT EXISTS api_keys (
     created_at INTEGER NOT NULL,
     revoked_at INTEGER,
     last_used_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS station_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 """
 
@@ -162,18 +169,76 @@ def insert_observation(db_path: str, current_conditions: dict[str, Any]) -> None
         conn.close()
 
 
+def get_metadata(db_path: str, key: str) -> str | None:
+    """Read one value from the station_metadata key/value table."""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("SELECT value FROM station_metadata WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def set_metadata(db_path: str, key: str, value: str) -> None:
+    """Write (insert or overwrite) one value in the station_metadata table."""
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO station_metadata (key, value) VALUES (?, ?)", (key, value)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _local_midnight(day: date, zone: ZoneInfo) -> int:
+    # A midnight skipped by a DST jump resolves to the jump itself, and a
+    # repeated one to its first occurrence, so days never overlap.
+    return int(datetime(day.year, day.month, day.day, tzinfo=zone).timestamp())
+
+
+def _local_day_buckets(
+    tz_name: str, start: int, end: int, first: int, last: int
+) -> list[tuple[str, int, int]]:
+    """(bucket label, first ts, last ts) for each calendar day in tz_name
+    from the one holding `first` through the one holding `last`, with the
+    bounds clipped to the queried [start, end]. Midnights come from zoneinfo,
+    so DST days are 23 or 25 hours long.
+    """
+    zone = ZoneInfo(tz_name)
+    day = datetime.fromtimestamp(first, zone).date()
+    day_start = _local_midnight(day, zone)
+    buckets = []
+    while day_start <= last:
+        next_day = day + timedelta(days=1)
+        next_start = _local_midnight(next_day, zone)
+        buckets.append(
+            (day.strftime(_BUCKET_FORMAT["daily"]), max(day_start, start), min(next_start - 1, end))
+        )
+        day, day_start = next_day, next_start
+    return buckets
+
+
 def query_history(
     db_path: str,
     start: int,
     end: int,
     resolution: Resolution = "raw",
+    tz_name: str = "UTC",
 ) -> list[dict[str, Any]]:
     """Return observations between start and end (unix timestamps, inclusive).
 
     resolution="raw" returns every stored row. "hourly"/"daily" aggregate
-    into UTC-bucketed columns via SQL rather than in Python - most fields get
-    a single `<field>_<agg>` column (see _AGG_FIELDS for which function),
-    except air_temperature which gets _avg/_min/_max.
+    via SQL rather than in Python - most fields get a single
+    `<field>_<agg>` column (see _AGG_FIELDS for which function), except
+    air_temperature which gets _avg/_min/_max.
+
+    "daily" buckets are calendar days in tz_name (an IANA zone name; the
+    station's own zone), DST-correct, so a fall-back day spans 25 hours.
+    The bucket label keeps the `YYYY-MM-DDT00:00:00Z` shape, carrying the
+    local date. "hourly" buckets are UTC hours, which cover exactly the same
+    readings as local hours in any whole-hour-offset zone, and their label
+    is a real UTC instant the site converts to the viewer's own time.
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -196,6 +261,35 @@ def query_history(
             f"{func}({field}) AS {field}_{func.lower()}"
             for field, func in _AGG_FIELDS.items()
         ]
+
+        if resolution == "daily":
+            first, last = conn.execute(
+                "SELECT MIN(ts), MAX(ts) FROM observations WHERE ts BETWEEN ? AND ?",
+                (start, end),
+            ).fetchone()
+            if first is None:
+                return []
+            # One row per local day, driving a ts-range lookup into
+            # observations: rows come out already grouped in day order, so
+            # SQLite never has to sort the whole range (which a GROUP BY on
+            # a computed bucket does - about twice as slow over a year).
+            conn.execute("CREATE TEMP TABLE day_buckets (bucket TEXT, lo INTEGER, hi INTEGER)")
+            conn.executemany(
+                "INSERT INTO day_buckets VALUES (?, ?, ?)",
+                _local_day_buckets(tz_name, start, end, first, last),
+            )
+            rows = conn.execute(
+                f"""
+                SELECT
+                    b.bucket AS bucket,
+                    {", ".join(agg_columns)}
+                FROM day_buckets b
+                CROSS JOIN observations ON observations.ts BETWEEN b.lo AND b.hi
+                GROUP BY b.rowid
+                ORDER BY b.rowid
+                """
+            ).fetchall()
+            return [dict(row) for row in rows]
 
         rows = conn.execute(
             f"""

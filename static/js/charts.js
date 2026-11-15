@@ -597,7 +597,8 @@ function pointTimestampMs(row, resolution) {
   return resolution === "raw" ? row.ts * 1000 : Date.parse(row.bucket);
 }
 
-// Daily buckets are UTC calendar days, so they're labelled with their UTC
+// Daily buckets are the station's local calendar days, sent as that date at
+// UTC midnight ("2026-11-14T00:00:00Z"), so they're labelled with their UTC
 // date - converting to local time would show every bucket as the day before
 // for anyone west of Greenwich.
 function buildTimeTicks(min, max, maxTicks, utc) {

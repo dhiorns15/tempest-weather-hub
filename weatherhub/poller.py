@@ -15,6 +15,7 @@ from typing import Any
 
 from .cache import LatestCache
 from .db import insert_observation
+from .station_timezone import StationTimezone
 from .tempest_client import TempestError, fetch_tempest
 from .udp_listener import UDP_SENSOR_FIELDS
 
@@ -62,6 +63,7 @@ def poll_forever(
     unit_system: str,
     interval_seconds: float,
     stop_event: threading.Event,
+    station_timezone: StationTimezone | None = None,
 ) -> None:
     while not stop_event.is_set():
         try:
@@ -83,6 +85,8 @@ def poll_forever(
                 lambda previous: keep_fresh_udp_fields(cloud_conditions, previous)
             )
             forecast_cache.set(raw.get("forecast", {}))
+            if station_timezone is not None:
+                station_timezone.set_reported(raw.get("timezone"))
             insert_observation(db_path, current_conditions)
             logger.info("Refreshed and stored Tempest observation")
         except TempestError as exc:
