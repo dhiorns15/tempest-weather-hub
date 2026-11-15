@@ -3,6 +3,10 @@ services:
     build:
       context: https://github.com/dhiorns15/tempest-weather-hub.git#main
     image: weather-hub:local
+    # The image only exists locally, so never try to pull it from a registry
+    # (that fails with "pull access denied"). "build" also makes every
+    # `up` rebuild from the latest code on GitHub.
+    pull_policy: build
     container_name: weather-hub
     ports:
       - "${HOST_PORT:-8080}:8080"

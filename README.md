@@ -79,23 +79,28 @@ local clone needed. Save `docker-compose.yaml` and `.env.example` somewhere,
 copy `.env.example` to `.env`, fill in your values, then:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-Always include `--build` when starting it — Compose only rebuilds when asked
-to, and Docker resolves `main` to its current commit before building, so
-`--build` is what actually fetches whatever's latest on GitHub (a bare
-`docker compose up -d` just reuses the image already built locally, however
-stale). If nothing's changed upstream, the rebuild is a fast no-op.
+The service sets `pull_policy: build`, so every `up` rebuilds the image, and
+Docker resolves `main` to its current commit before building — running `up`
+again is how you update to whatever's latest on GitHub. If nothing's changed
+upstream, the rebuild is a fast no-op. To start the image already built
+locally without rebuilding, add `--no-build`.
 
-**If that fails** with an error like `failed to evaluate path "https://...`,
+`pull_policy: build` also makes `docker compose pull` skip this service. The
+image is only ever built locally, so without it a pull fails with
+`pull access denied for weather-hub` — which is what stack managers that pull
+before updating (e.g. Unraid's Compose Manager "Update Stack") would hit.
+
+**If the build fails** with an error like `failed to evaluate path "https://...`,
 your Docker Compose is using the newer "Bake" builder, which has a bug
 handling remote git build contexts (seen on Docker Desktop for Windows).
 Build the image directly instead, then bring the stack up without rebuilding:
 
 ```bash
 docker build -t weather-hub:local https://github.com/dhiorns15/tempest-weather-hub.git#main
-docker compose up -d
+docker compose up -d --no-build
 ```
 
 or clone the repo locally and change `build.context` in `docker-compose.yaml`
