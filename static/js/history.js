@@ -45,6 +45,7 @@ async function loadHistory(start, end, resolution, label) {
   document.getElementById("range-label").textContent = label;
   const status = document.getElementById("history-status");
   status.textContent = "Loading…";
+  loadRangeWindRose(start, end, label);
 
   try {
     const response = await fetch(
@@ -141,8 +142,17 @@ function downloadHistory(format) {
 document.getElementById("download-csv").addEventListener("click", () => downloadHistory("csv"));
 document.getElementById("download-json").addEventListener("click", () => downloadHistory("json"));
 
+// The wind rose follows the selected range (see windrose.js).
+function loadRangeWindRose(start, end, label) {
+  const note = document.getElementById("wind-rose-note");
+  loadWindRose(document.getElementById("wind-rose"), start, end, (data) => {
+    note.textContent = `${label} · ${data.total.toLocaleString()} readings`;
+  });
+}
+
 (async () => {
   await loadCapabilities();
   buildChartGrid("chart-grid");
   loadRange("day");
+  loadRecords();
 })();

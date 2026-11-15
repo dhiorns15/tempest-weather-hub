@@ -142,6 +142,8 @@ survives container restarts/rebuilds.
 | `GET /api/station-health` | none | battery/signal/uptime/firmware, only populated when `TEMPEST_UDP_ENABLED=true` |
 | `GET /api/capabilities` | none | `{"cloud_configured": bool, "udp_configured": bool, "units": {...}, "timezone": "America/Denver"}` - which data source(s) are active, the display labels for the configured `TEMPEST_UNITS` (see below), and the station timezone daily history uses |
 | `GET /api/alerts?limit=` | none | `{"enabled": bool, "alerts": [...]}` - most recent alerts first (default 50, max 200), see [Alerts](#alerts-optional) |
+| `GET /site/records` | none | record highs/lows (all time, this year, this month) and "on this day" comparisons, for the History page - see [Records and comparisons](#records-and-comparisons) |
+| `GET /site/wind-rose?start=&end=` | none | wind direction/speed counts for a range, for the wind roses - see [Wind rose](#wind-rose) |
 | `/`, `/history.html`, ... | none | the site itself |
 
 `units` in `/api/capabilities` is
@@ -186,6 +188,100 @@ same reason.
   browsers save the response as a file instead of rendering it inline. The
   History page's "Download CSV"/"Download JSON" buttons use this against
   `/site/history` for whatever range is currently on screen.
+
+### Records and comparisons
+
+The History page's Records section reads `GET /site/records` (no
+parameters, unauthenticated like `/site/history`). Everything is worked out
+over the station's local calendar days - the same DST-aware days as daily
+history (see `STATION_TIMEZONE`) - and times are shown in the station's
+timezone.
+
+- **Records**, for all time, this year and this month: highest and lowest
+  temperature, peak gust, highest and lowest station pressure (each with
+  the moment it was first reached - a later reading that only equals a
+  record doesn't take it over), and the wettest day.
+- **Wettest day** is the day with the largest daily rain total, which is
+  the day's highest `precip_accum_local_day` (a running total that resets
+  at local midnight). Readings from the first 15 minutes after midnight are
+  ignored for it: the cloud's first reading of a day can still carry the
+  previous day's total. Rain totals come from the cloud source only, so
+  `rain_reported` says whether a scope has any rain data at all (a
+  UDP-only station has none) and `wettest_day` is `null` when there's no
+  data or no rain.
+- **On this day** compares today so far with yesterday, the same date a
+  week, a month and a year ago (a month back from the 31st is the last day
+  of the shorter month): high, low, peak gust and rain. A day without
+  readings comes back `"available": false` with a `reason` of
+  `before_history` (before the first stored reading) or `no_data` (the
+  station or this service recorded nothing that day), and `complete` flags
+  days whose readings don't reach within an hour of both midnights. The
+  comparisons fill in by themselves as history builds up.
+
+```json
+{"timezone": "America/Denver", "today": "2026-11-14", "first_day": "2026-07-27", "days_with_data": 90,
+ "records": {
+   "all_time": {"label": "All time", "start": null, "days": 90,
+     "temp_high": {"value": 105.0, "date": "2026-08-02", "ts": 1785705547},
+     "temp_low": {"value": 30.7, "date": "2026-10-17", "ts": 1792238905},
+     "gust": {"value": 19.8, "date": "2026-10-10", "ts": 1791654727},
+     "rain_reported": true, "wettest_day": {"value": 0.45, "date": "2026-09-20"},
+     "pressure_high": {...}, "pressure_low": {...}},
+   "this_year": {"label": "This year", "start": "2026-01-01", ...},
+   "this_month": {"label": "This month", "start": "2026-11-01", ...}},
+ "on_this_day": {
+   "today": {"date": "2026-11-14", "available": true, "first_ts": 1794682376, "last_ts": 1794713018,
+             "readings": 609, "complete": false, "temp_high": 51.0, "temp_low": 43.8, "gust": 8.0, "rain": 0.0},
+   "comparisons": [
+     {"key": "yesterday", "label": "Yesterday", "date": "2026-11-13", "available": false, "reason": "no_data"},
+     {"key": "month", "label": "A month ago", "date": "2026-10-14", "available": true, "temp_high": 50.3, ...},
+     ...]},
+ "units": {"system": "imperial", "temp": "°F", ...}}
+```
+
+Finding records means a pass over the whole observations table, which grows
+by about half a million rows a year with UDP on. The summaries of every day
+before today are kept in memory for 10 minutes (and rebuilt when the
+station's day or timezone changes); today's readings are read fresh on every
+request, so a record set today shows straight away, and rows backfilled
+into earlier days show within 10 minutes. On a copy of a real 152,000-row
+history the full pass takes about 45 ms and a cached request about 1 ms; on
+a 1.5-million-row copy (about three years) about 425 ms and 2 ms.
+
+### Wind rose
+
+`GET /site/wind-rose?start=&end=` (unix timestamps, the last 24 hours by
+default, unauthenticated) counts the raw readings in the range by
+direction and average wind speed (`wind_avg`). The History page draws it
+for whatever range is selected; the current page shows the last 24 hours.
+
+- **Directions:** 16 compass sectors of 22.5°, each centred on its bearing
+  (N covers 348.75°-11.25°).
+- **Calm:** an average speed below 1 mph (0.5 m/s in metric) - Beaufort
+  force 0. Calm readings are counted on their own, not in a sector: the
+  station reports a bearing of 0° for still air, so their direction means
+  nothing.
+- **Speed classes** (from the class's lower bound up to, not including, the
+  next): 1-3, 3-5, 5-10, 10-15, 15-20 and 20+ mph, or 0.5-1.5, 1.5-2.5,
+  2.5-5, 5-7.5, 7.5-10 and 10+ m/s. The low end is split finely because
+  sustained wind at a home station is mostly light. The endpoint returns
+  the classes and their labels, so the site hardcodes none of this.
+- Each stored reading counts once. A reading without an average speed, or
+  without a direction when it isn't calm, isn't counted at all, so
+  `calm` plus every count always equals `total`. With both data sources on,
+  the cloud's rows count too; while UDP is fresh they carry the UDP values,
+  so they weight those minutes slightly more rather than adding other wind.
+
+```json
+{"start": 1794626678, "end": 1794713078, "unit": "mph", "calm_below": 1.0,
+ "sectors": ["N", "NNE", "NE", ..., "NNW"], "sector_degrees": 22.5,
+ "speed_classes": [{"min": 1.0, "max": 3.0, "label": "1–3 mph"}, ..., {"min": 20.0, "max": null, "label": "20+ mph"}],
+ "counts": [[7, 0, 0, 0, 0, 0], [110, 94, 3, 0, 0, 0], ...],
+ "calm": 42, "total": 609, "calm_share": 0.069}
+```
+
+`counts` has one row per sector, in `sectors` order, with one count per
+speed class. A year of real history (152,000 readings) takes about 60 ms.
 
 ### Managing API keys
 
@@ -558,6 +654,10 @@ Not yet built (ideas from the original plan, pick up if interesting):
   (e.g. India, Newfoundland) each hourly bucket straddles two local hours.
   UDP-only setups that have never been cloud-connected bucket days in UTC
   unless `STATION_TIMEZONE` is set.
+- The wettest-day record is the day's highest running rain total. The
+  cloud's live total is sometimes revised down during the day (see
+  [Backfilling missing history](#backfilling-missing-history)), so on such a
+  day the record can sit a few hundredths above the total the day ended on.
 - `air_density` and `delta_t` are specialized (aviation/agricultural) metrics
   included for completeness since Tempest reports them, but have limited
   everyday display value.

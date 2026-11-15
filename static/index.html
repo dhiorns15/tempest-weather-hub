@@ -188,11 +188,20 @@
     </div>
 
     <div id="chart-grid"></div>
+
+    <div class="section-head">
+      <h2 id="wind-rose-heading">Wind rose</h2>
+      <p class="section-note">Last 24 hours</p>
+    </div>
+    <section class="card windrose-card" id="wind-rose-card" aria-labelledby="wind-rose-heading">
+      <div class="windrose" data-wind-rose="auto"><p class="windrose-summary">Loading&hellip;</p></div>
+    </section>
   </main>
 
   <script src="/js/vendor/chart.umd.min.js"></script>
   <script src="/js/icons.js"></script>
   <script src="/js/charts.js"></script>
   <script src="/js/site.js"></script>
+  <script src="/js/windrose.js"></script>
 </body>
 </html>

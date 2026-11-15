@@ -1075,6 +1075,495 @@ input {
   margin-top: 1.25rem;
 }
 
+/* ---------------------------------------------------------------------------
+   Wind rose (windrose.js) - inline SVG; every colour is a theme token, so it
+   follows whichever theme is showing.
+
+   Speed classes are an ordinal ramp of the series-1 blue: mixed toward the
+   surface for light winds and toward the text colour for strong ones. That
+   gives light-to-dark steps on the light theme and dark-to-bright on the
+   dark one (light winds always sit closest to the surface), validated as an
+   ordinal ramp against both card surfaces.
+   --------------------------------------------------------------------------- */
+.windrose {
+  --rose-0: color-mix(in oklab, var(--series-1) 60%, var(--tooltip-bg));
+  --rose-1: color-mix(in oklab, var(--series-1) 80%, var(--tooltip-bg));
+  --rose-2: var(--series-1);
+  --rose-3: color-mix(in oklab, var(--series-1) 78%, var(--text));
+  --rose-4: color-mix(in oklab, var(--series-1) 58%, var(--text));
+  --rose-5: color-mix(in oklab, var(--series-1) 40%, var(--text));
+
+  container-type: inline-size;
+  transition: opacity 0.2s;
+}
+
+.windrose.is-loading {
+  opacity: 0.55;
+}
+
+.rose-c0 { --rose-fill: var(--rose-0); }
+.rose-c1 { --rose-fill: var(--rose-1); }
+.rose-c2 { --rose-fill: var(--rose-2); }
+.rose-c3 { --rose-fill: var(--rose-3); }
+.rose-c4 { --rose-fill: var(--rose-4); }
+.rose-c5 { --rose-fill: var(--rose-5); }
+
+.windrose-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem 2.5rem;
+}
+
+@container (min-width: 720px) {
+  .windrose-body {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+}
+
+.windrose-plot {
+  position: relative;
+  flex: none;
+  width: min(100%, 420px);
+}
+
+.windrose-plot svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.rose-grid circle,
+.rose-grid line {
+  fill: none;
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.rose-labels text {
+  fill: var(--chart-tick);
+  font-size: 12px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.rose-labels text.rose-cardinal {
+  fill: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rose-labels text.rose-ring-label {
+  fill: var(--chart-tick);
+  font-size: 10px;
+  font-weight: 500;
+  paint-order: stroke;
+  stroke: var(--tooltip-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.rose-segment {
+  fill: var(--rose-fill);
+  transition: opacity 0.15s;
+}
+
+.rose-petals.has-active .rose-sector:not(.is-active) .rose-segment {
+  opacity: 0.35;
+}
+
+.rose-calm circle {
+  fill: none;
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.rose-calm text {
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.rose-calm-value {
+  fill: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rose-calm-label {
+  fill: var(--chart-tick);
+  font-size: 10px;
+}
+
+.rose-hit {
+  fill: transparent;
+  cursor: default;
+}
+
+.rose-hit:focus {
+  outline: none;
+}
+
+.rose-hit:focus-visible {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.windrose-tip {
+  position: absolute;
+  z-index: 2;
+  min-width: 11rem;
+  max-width: 15rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  background: var(--tooltip-bg);
+  border: 1px solid var(--tooltip-border);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.windrose-tip-title {
+  font-weight: 650;
+}
+
+.windrose-tip-title span,
+.windrose-tip-total {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.windrose-tip ul {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.windrose-tip li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.1rem 0.25rem;
+  margin: 0 -0.25rem;
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+
+.windrose-tip li strong {
+  min-width: 2.8rem;
+  color: var(--text);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.windrose-tip li.is-active {
+  background: var(--track);
+  color: var(--text);
+}
+
+/* Short line key, the series' own colour. */
+.windrose-key {
+  flex: none;
+  width: 0.8rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--rose-fill);
+}
+
+.windrose-side {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+.windrose-summary {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.windrose-legend-title {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.windrose-legend ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.windrose-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.windrose-swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 3px;
+  background: var(--rose-fill);
+}
+
+.windrose-note,
+.records-footnote {
+  margin: 0.75rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.windrose-table {
+  margin-top: 1rem;
+}
+
+.windrose-table summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.windrose-table-scroll {
+  overflow-x: auto;
+  margin-top: 0.6rem;
+}
+
+.windrose-table table {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.windrose-table-caption {
+  margin: 0.6rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.windrose-table th,
+.windrose-table td {
+  padding: 0.18rem 0.6rem;
+  border-bottom: 1px solid var(--hairline);
+  text-align: right;
+}
+
+.windrose-table thead th {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.windrose-table th.row-head,
+.windrose-table thead th:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+
+.windrose-table td.total,
+.windrose-table tfoot td {
+  font-weight: 650;
+}
+
+/* ---------------------------------------------------------------------------
+   Records and "on this day" (records.js)
+   --------------------------------------------------------------------------- */
+.records-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (min-width: 1100px) {
+  .records-layout {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  }
+}
+
+.records-card {
+  container-type: inline-size;
+}
+
+.records-message {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.records-table,
+.otd-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.records-table th,
+.records-table td,
+.otd-table th,
+.otd-table td {
+  padding: 0.55rem 0.5rem;
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  vertical-align: top;
+}
+
+.records-table tbody tr:last-child > *,
+.otd-table tbody tr:last-child > * {
+  border-bottom: none;
+}
+
+.records-table thead th,
+.otd-table thead th {
+  padding-top: 0;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.records-table tbody th,
+.otd-table tbody th {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.rec-value {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 650;
+}
+
+.rec-value.rec-empty {
+  color: var(--text-muted);
+}
+
+.rec-when,
+.otd-date {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.rec-time {
+  white-space: nowrap;
+}
+
+.rec-time::before {
+  content: " · ";
+}
+
+/* Narrow: each record becomes its label over three scope cells. */
+@container (max-width: 540px) {
+  .records-table thead {
+    display: none;
+  }
+
+  .records-table tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .records-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .records-table th,
+  .records-table td {
+    border-bottom: none;
+    padding: 0.4rem 0.35rem;
+  }
+
+  .records-table tbody th {
+    grid-column: 1 / -1;
+    padding-top: 0.75rem;
+    padding-bottom: 0;
+    color: var(--text);
+  }
+
+  .records-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 650;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .rec-value {
+    font-size: 1rem;
+  }
+
+  /* Time under the date rather than wrapping mid-way. */
+  .rec-time {
+    display: block;
+  }
+
+  .rec-time::before {
+    content: none;
+  }
+}
+
+.otd-table td {
+  font-size: 1.02rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.otd-table thead th:not(:first-child),
+.otd-table td:not(.otd-missing) {
+  text-align: right;
+}
+
+.otd-unit {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.otd-table tr.otd-today th {
+  color: var(--text);
+}
+
+.otd-table td.otd-missing {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: normal;
+}
+
+@container (max-width: 400px) {
+  .otd-table th,
+  .otd-table td {
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+  }
+
+  .otd-table td {
+    font-size: 0.92rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

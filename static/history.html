@@ -106,10 +106,40 @@
     </div>
 
     <div id="chart-grid"></div>
+
+    <div class="section-head">
+      <h2 id="wind-rose-heading">Wind rose</h2>
+      <p class="section-note" id="wind-rose-note"></p>
+    </div>
+    <section class="card windrose-card" aria-labelledby="wind-rose-heading">
+      <div class="windrose" id="wind-rose"><p class="windrose-summary">Loading&hellip;</p></div>
+    </section>
+
+    <div class="section-head">
+      <h2>Records</h2>
+      <p class="section-note" id="records-note"></p>
+    </div>
+    <div class="records-layout">
+      <section class="card records-card" aria-labelledby="records-title">
+        <div class="card-head">
+          <h3 class="card-title" id="records-title">Highs and lows</h3>
+        </div>
+        <div id="records-body"><p class="records-message">Loading&hellip;</p></div>
+      </section>
+      <section class="card records-card" aria-labelledby="on-this-day-title">
+        <div class="card-head">
+          <h3 class="card-title" id="on-this-day-title">On this day</h3>
+        </div>
+        <div id="on-this-day-body"><p class="records-message">Loading&hellip;</p></div>
+        <p class="records-footnote" id="on-this-day-note"></p>
+      </section>
+    </div>
   </main>
 
   <script src="/js/vendor/chart.umd.min.js"></script>
   <script src="/js/charts.js"></script>
+  <script src="/js/windrose.js"></script>
+  <script src="/js/records.js"></script>
   <script src="/js/history.js"></script>
 </body>
 </html>
