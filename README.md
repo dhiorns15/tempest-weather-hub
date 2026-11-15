@@ -619,33 +619,32 @@ maskable safe zone. To regenerate them, rasterise with any SVG tool, e.g.
 ## Roadmap / backlog
 
 Shipped: current conditions + hourly/daily forecast (grouped by day) +
-history (with per-metric charts and custom date ranges) + admin-issued API
-keys + an embeddable current-conditions widget + weather-condition page
-backgrounds + Kiosk-compatible output (`/kiosk/weather`) + an optional local
-UDP listener for faster current-conditions updates and its own history +
-station health monitoring + the full set of Tempest-provided metrics
-tracked and charted + running with only one data source configured (cloud
-or UDP, not both required).
+history (with per-metric charts, custom date ranges and CSV/JSON export) in
+station-local days + record highs/lows and "on this day" comparisons + wind
+roses + backfill of missed history from Tempest's cloud (on startup and on
+demand) + optional alerts by webhook or email (no data, frost, wind,
+lightning, rain, battery) + admin-issued API keys + an embeddable
+current-conditions widget + weather-condition page backgrounds with an
+Auto/Light/Dark switch + a web-app manifest and service worker +
+Kiosk-compatible output (`/kiosk/weather`) + an optional local UDP listener
+for faster current-conditions updates and its own history + station health
+monitoring + the full set of Tempest-provided metrics tracked and charted +
+unit labels that follow `TEMPEST_UNITS` + running with only one data source
+configured (cloud or UDP, not both required).
 
-Not yet built (ideas from the original plan, pick up if interesting):
-- Backfill history further back than "since this app started" via Tempest's
-  historical stats endpoint, if it exposes enough range.
-- CSV/JSON export of a chosen date range.
-- Record highs/lows, "on this day" comparisons.
-- Alerts (frost, high wind) via webhook or email — the UDP listener's
-  `evt_strike`/`evt_precip` messages would make instant versions of these
-  possible, not just REST-poll-interval-delayed ones.
+Not yet built (pick up if interesting):
+- Show recent alerts on the site (`GET /api/alerts` already serves them).
+- Derived fields for backfilled rows: Tempest's archive only has raw sensor
+  readings, so feels-like, dew point, sea-level pressure and the lightning
+  columns are empty for backfilled spans.
+- Rain and lightning history from UDP at its ~1-minute cadence (the sensor
+  fields already are; rain needs a running daily total computed from UDP's
+  per-minute deltas, lightning a rolling count from strike events).
 - More widget styles: compact badge, detailed card, mini sparkline chart.
 - Per-key rate limiting + usage counters.
 - Multi-station support (built once already for `tempest-kiosk-weather-bridge`
   and reverted there — could be re-applied here).
-- Manual dark/light theme toggle (the site follows the OS setting, and
-  always goes dark for night/storm conditions) + PWA installability.
 - RSS/JSON daily-summary feed.
-- History at UDP's ~1-minute cadence instead of the REST poll's 5 minutes,
-  if finer-grained charts are wanted (kept out of this pass to avoid the
-  added complexity of computing a running daily rain total from UDP's
-  per-minute deltas).
 
 ## Known limitations
 
