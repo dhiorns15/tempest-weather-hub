@@ -6,9 +6,16 @@
   <meta name="color-scheme" content="light dark" />
   <!-- The site ships its own dark theme; stop Dark Reader recolouring it. -->
   <meta name="darkreader-lock" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef2f7" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1420" />
   <title>Weather Hub — History</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/css/site.css" />
+  <!-- Blocking on purpose: settles the theme before the first paint. -->
+  <script src="/js/theme.js"></script>
+  <script src="/js/pwa.js" defer></script>
 </head>
 <body>
   <main class="page">
@@ -20,10 +27,36 @@
           <p class="station-name" id="station-name"></p>
         </div>
       </div>
-      <nav class="site-nav" aria-label="Pages">
-        <a href="/">Current</a>
-        <a href="/history.html" class="active" aria-current="page">History</a>
-      </nav>
+      <div class="topbar-actions">
+        <nav class="site-nav" aria-label="Pages">
+          <a href="/">Current</a>
+          <a href="/history.html" class="active" aria-current="page">History</a>
+        </nav>
+        <fieldset class="theme-toggle">
+          <legend class="visually-hidden">Theme</legend>
+          <label title="Auto: follow the system setting">
+            <input type="radio" name="theme" value="auto" checked />
+            <span class="theme-face" aria-hidden="true">
+              <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor" /></svg>
+            </span>
+            <span class="visually-hidden">Auto</span>
+          </label>
+          <label title="Light">
+            <input type="radio" name="theme" value="light" />
+            <span class="theme-face" aria-hidden="true">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="2.75" /><path d="M8 1.5v1.25M8 13.25v1.25M1.5 8h1.25M13.25 8h1.25M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9" /></svg>
+            </span>
+            <span class="visually-hidden">Light</span>
+          </label>
+          <label title="Dark">
+            <input type="radio" name="theme" value="dark" />
+            <span class="theme-face" aria-hidden="true">
+              <svg viewBox="0 0 16 16"><path d="M13.6 10.1A6 6 0 0 1 5.9 2.4a6 6 0 1 0 7.7 7.7z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /></svg>
+            </span>
+            <span class="visually-hidden">Dark</span>
+          </label>
+        </fieldset>
+      </div>
     </header>
 
     <section class="card toolbar" aria-label="Time range and export">

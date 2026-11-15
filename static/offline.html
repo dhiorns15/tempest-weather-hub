@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="darkreader-lock" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef2f7" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1420" />
+  <title>Weather Hub — Offline</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/css/site.css" />
+  <script src="/js/theme.js"></script>
+  <style>
+    .offline-card {
+      max-width: 34rem;
+    }
+
+    .offline-card h2 {
+      margin: 0 0 0.5rem;
+      font-size: 1.3rem;
+    }
+
+    .offline-card p {
+      margin: 0 0 1rem;
+      color: var(--text-muted);
+    }
+
+    .offline-card .btn {
+      display: inline-block;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Shown by the service worker (sw.js) when a page can't be loaded. -->
+  <main class="page">
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-mark" src="/favicon.svg" alt="" />
+        <div>
+          <h1>Weather Hub</h1>
+        </div>
+      </div>
+    </header>
+
+    <section class="card offline-card">
+      <h2>Can't reach Weather Hub</h2>
+      <p>
+        This device is offline, or the hub isn't answering. Readings are only ever shown live,
+        so there's nothing to show until the connection is back.
+      </p>
+      <a class="btn" href="">Try again</a>
+    </section>
+  </main>
+</body>
+</html>

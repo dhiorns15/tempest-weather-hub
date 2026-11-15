@@ -34,6 +34,12 @@ logger = logging.getLogger("weatherhub")
 _RAW_RESOLUTION_MAX_RANGE_SECONDS = 31 * 86400
 _DEFAULT_RANGE_SECONDS = 86400
 
+# Types mimetypes.guess_type can't be trusted with: its table also reads the
+# host's own (the Windows registry, /etc/mime.types), which may not know them.
+_CONTENT_TYPE_OVERRIDES = {
+    ".webmanifest": "application/manifest+json",
+}
+
 
 def _resolve_static_path(static_dir: Path, url_path: str) -> Path | None:
     """Map a URL path onto a file under static_dir, or None if disallowed/missing."""
@@ -104,7 +110,9 @@ def make_handler(
             self.wfile.write(body)
 
         def _write_file(self, path: Path) -> None:
-            content_type, _ = mimetypes.guess_type(str(path))
+            content_type = _CONTENT_TYPE_OVERRIDES.get(path.suffix.lower())
+            if content_type is None:
+                content_type, _ = mimetypes.guess_type(str(path))
             body = path.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", content_type or "application/octet-stream")

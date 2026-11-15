@@ -460,6 +460,66 @@ line for). Station health (battery, signal, uptime, firmware) is a separate
 panel sourced from the UDP listener's `device_status`/`hub_status` messages,
 not weather data — see `/api/station-health` above.
 
+## Theme
+
+Both pages have an Auto / Light / Dark switch in the top bar. The choice is
+remembered per browser (in `localStorage`; if storage is blocked the switch
+still works, it just isn't remembered).
+
+- **Auto** (the default) follows the OS light/dark setting, and goes dark for
+  night and thunderstorm skies whatever the OS says.
+- **Light** stays light even at night: night and storm skies have light
+  versions.
+- **Dark** stays dark in daytime, using the dark versions of the daytime skies.
+
+`static/css/site.css` holds the dark tokens and dark skies once, in a single
+`@media (prefers-color-scheme: dark)` block. `static/js/theme.js` is loaded as a
+blocking script in `<head>`, so the choice is applied before the first paint
+with no flash of the wrong theme. It re-points that block's media query (`all`
+to force dark, `not all` to force light, the OS query again for Auto), sets
+`data-theme` (the theme actually showing) and `data-theme-pref` (the choice) on
+`<html>`, keeps `color-scheme` and the `theme-color` metas in step, and
+repaints the charts. Any new rule written inside a
+`prefers-color-scheme: dark` query in `site.css` follows the switch
+automatically. With JavaScript off the switch is hidden and the site simply
+follows the OS setting.
+
+## Installing as an app
+
+The site has a web app manifest (`static/manifest.webmanifest`), icons
+(`static/icons/`, including a maskable version and an `apple-touch-icon`) and a
+service worker (`static/sw.js`) with an offline page (`static/offline.html`).
+
+How much of that a browser uses depends on how you reach the site. Browsers
+only allow service workers and their "Install app" prompt in a **secure
+context**: HTTPS, or `http://localhost` on the machine itself. A plain-HTTP LAN
+address such as `http://192.168.1.10:8080` is not one.
+
+| | Plain HTTP on a LAN address | HTTPS (or `http://localhost`) |
+|---|---|---|
+| Theme switch, browser toolbar colour | Yes | Yes |
+| Browser's "Install app" / standalone app window | No | Yes |
+| Service worker and offline page | No (not registered; nothing else is affected) | Yes |
+| Home-screen shortcut via the browser menu ("Add to Home Screen", "Create shortcut") | Often possible, but as an ordinary shortcut; whether it opens as an app window or a normal tab depends on the browser (not tested) | Yes, as an installed app |
+
+To get the installable app on other devices, serve the hub over HTTPS with a
+certificate those devices trust, for example behind a reverse proxy (Caddy,
+Nginx Proxy Manager, Traefik, Tailscale Serve). The hub needs no extra
+configuration for that.
+
+The service worker is network-first for everything it handles, so while
+you're online you always get the current files from the server and an update
+shows up on the next load; its cache is only used when the network fails.
+Live data (`/api/`, `/site/`, `/widget/`, `/kiosk/`, `/healthz`) is never
+cached: offline, a page that can't load shows the offline page ("Can't reach
+Weather Hub") instead of old readings.
+
+The PNG icons were generated once from `static/favicon.svg` and are committed;
+there is no build step. The maskable and apple-touch versions put the artwork
+on a full-bleed square, scaled down (to 90% and 85%) so it stays inside the
+maskable safe zone. To regenerate them, rasterise with any SVG tool, e.g.
+`rsvg-convert -w 512 -h 512 static/favicon.svg -o static/icons/icon-512.png`.
+
 ## Roadmap / backlog
 
 Shipped: current conditions + hourly/daily forecast (grouped by day) +

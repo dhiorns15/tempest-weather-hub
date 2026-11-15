@@ -1,11 +1,13 @@
 /* ---------------------------------------------------------------------------
    Theme tokens
 
-   Everything is written against these. The dark set is declared twice on
-   purpose: once for the OS dark setting, and once for the weather conditions
-   that are dark whatever the OS says (night, thunderstorm) - a media query
-   and a selector list can't share one rule. Keep the two blocks identical.
+   Everything is written against these. This is the light set; the dark set
+   is declared once, in the "Dark theme" media block below the skies.
    --------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+}
+
 body {
   color-scheme: light;
 
@@ -54,7 +56,51 @@ body {
   --sky: linear-gradient(180deg, #eef2f7 0%, #dde5ee 100%);
 }
 
+/* ---------------------------------------------------------------------------
+   Skies - the page background follows current conditions. Every condition
+   has a light sky here and a dark one in the dark theme below. In Auto,
+   theme.js switches the page to the dark theme for night and storm skies
+   whatever the OS says; the light night skies are what Light mode shows.
+   --------------------------------------------------------------------------- */
+body.weather-clear-day {
+  --sky: radial-gradient(circle at 88% -5%, rgba(255, 233, 160, 0.95), transparent 42%),
+    linear-gradient(180deg, #6fb4f3 0%, #a9d3f6 60%, #dbe9f3 100%);
+}
+body.weather-partly-cloudy-day {
+  --sky: radial-gradient(circle at 88% -5%, rgba(255, 240, 190, 0.7), transparent 38%),
+    linear-gradient(180deg, #86bdf0 0%, #b9d6ee 55%, #d9e4ee 100%);
+}
+body.weather-cloudy { --sky: linear-gradient(180deg, #c6d0dc 0%, #a3b0be 100%); }
+body.weather-foggy { --sky: linear-gradient(180deg, #dfe4e9 0%, #bfc7cf 100%); }
+body.weather-rainy { --sky: linear-gradient(180deg, #b6c3d0 0%, #92a3b4 100%); }
+body.weather-sleet { --sky: linear-gradient(180deg, #bccad6 0%, #96a8b9 100%); }
+body.weather-snow-day { --sky: linear-gradient(180deg, #eaf2f9 0%, #c7d8e7 100%); }
+body.weather-windy { --sky: linear-gradient(180deg, #bcd2d5 0%, #8faaad 100%); }
+
+body.weather-clear-night {
+  --sky: radial-gradient(circle at 85% 0%, rgba(140, 150, 230, 0.35), transparent 40%),
+    linear-gradient(180deg, #a9b5e0 0%, #c3cbe8 60%, #d6d6ec 100%);
+}
+body.weather-partly-cloudy-night { --sky: linear-gradient(180deg, #b0bcda 0%, #ccd4e6 100%); }
+body.weather-rainy-night { --sky: linear-gradient(180deg, #a7b2c5 0%, #8b97ac 100%); }
+body.weather-snow-night { --sky: linear-gradient(180deg, #d3dcec 0%, #b4c2d8 100%); }
+body.weather-thunderstorm {
+  --sky: radial-gradient(circle at 20% 0%, rgba(140, 110, 220, 0.28), transparent 45%),
+    linear-gradient(180deg, #b4aecb 0%, #9693ab 100%);
+}
+
+/* ---------------------------------------------------------------------------
+   Dark theme - the only place the dark tokens and dark skies are written.
+   Without JavaScript this simply follows the OS setting. theme.js re-points
+   this media query (to "all" or "not all") for the manual Light/Dark choice
+   and for night/storm skies in Auto, so any rule added inside a
+   prefers-color-scheme: dark query in this file follows the chosen theme.
+   --------------------------------------------------------------------------- */
 @media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+
   body {
     color-scheme: dark;
 
@@ -95,84 +141,7 @@ body {
 
     --sky: linear-gradient(180deg, #0f1420 0%, #171d2b 100%);
   }
-}
 
-body.weather-clear-night,
-body.weather-partly-cloudy-night,
-body.weather-rainy-night,
-body.weather-snow-night,
-body.weather-thunderstorm {
-  color-scheme: dark;
-
-  --text: #f1f5fb;
-  --text-muted: #a9b6c9;
-  --page-text: #f1f5fb;
-  --page-muted: #c3cede;
-
-  --card: rgba(13, 19, 31, 0.58);
-  --card-border: rgba(255, 255, 255, 0.1);
-  --tile: rgba(255, 255, 255, 0.06);
-  --tile-border: rgba(255, 255, 255, 0.07);
-  --hairline: rgba(255, 255, 255, 0.1);
-  --shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
-
-  --accent: #6da7ec;
-  --accent-bg: #256abf;
-  --accent-ink: #ffffff;
-  --track: rgba(109, 167, 236, 0.2);
-
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --chart-grid: rgba(255, 255, 255, 0.09);
-  --chart-tick: #a9b6c9;
-  --chart-crosshair: rgba(255, 255, 255, 0.4);
-  --tooltip-bg: #131b2a;
-  --tooltip-border: rgba(255, 255, 255, 0.16);
-
-  --ic-sun: #ffc83d;
-  --ic-moon: #dfe3ff;
-  --ic-cloud: #dde5f0;
-  --ic-cloud-dark: #9aa8bc;
-  --ic-rain: #6fb4ff;
-  --ic-snow: #d3eaff;
-  --ic-bolt: #ffd23f;
-  --ic-line: #b3c0d2;
-}
-
-/* ---------------------------------------------------------------------------
-   Skies - the page background follows current conditions. Daytime conditions
-   get a light sky and a deeper one for OS dark mode; night and storm
-   conditions only have a dark sky (and force the dark tokens above).
-   --------------------------------------------------------------------------- */
-body.weather-clear-day {
-  --sky: radial-gradient(circle at 88% -5%, rgba(255, 233, 160, 0.95), transparent 42%),
-    linear-gradient(180deg, #6fb4f3 0%, #a9d3f6 60%, #dbe9f3 100%);
-}
-body.weather-partly-cloudy-day {
-  --sky: radial-gradient(circle at 88% -5%, rgba(255, 240, 190, 0.7), transparent 38%),
-    linear-gradient(180deg, #86bdf0 0%, #b9d6ee 55%, #d9e4ee 100%);
-}
-body.weather-cloudy { --sky: linear-gradient(180deg, #c6d0dc 0%, #a3b0be 100%); }
-body.weather-foggy { --sky: linear-gradient(180deg, #dfe4e9 0%, #bfc7cf 100%); }
-body.weather-rainy { --sky: linear-gradient(180deg, #b6c3d0 0%, #92a3b4 100%); }
-body.weather-sleet { --sky: linear-gradient(180deg, #bccad6 0%, #96a8b9 100%); }
-body.weather-snow-day { --sky: linear-gradient(180deg, #eaf2f9 0%, #c7d8e7 100%); }
-body.weather-windy { --sky: linear-gradient(180deg, #bcd2d5 0%, #8faaad 100%); }
-
-body.weather-clear-night {
-  --sky: radial-gradient(circle at 85% 0%, rgba(120, 130, 220, 0.28), transparent 40%),
-    linear-gradient(180deg, #070b1e 0%, #141b3d 60%, #1f1a45 100%);
-}
-body.weather-partly-cloudy-night { --sky: linear-gradient(180deg, #0d1630 0%, #27334d 100%); }
-body.weather-rainy-night { --sky: linear-gradient(180deg, #151c27 0%, #0c1016 100%); }
-body.weather-snow-night { --sky: linear-gradient(180deg, #172131 0%, #33475e 100%); }
-body.weather-thunderstorm {
-  --sky: radial-gradient(circle at 20% 0%, rgba(140, 110, 220, 0.22), transparent 45%),
-    linear-gradient(180deg, #211d33 0%, #0f0d18 100%);
-}
-
-@media (prefers-color-scheme: dark) {
   body.weather-clear-day {
     --sky: radial-gradient(circle at 88% -5%, rgba(255, 196, 110, 0.22), transparent 42%),
       linear-gradient(180deg, #0b2c52 0%, #15467a 60%, #24567f 100%);
@@ -187,6 +156,18 @@ body.weather-thunderstorm {
   body.weather-sleet { --sky: linear-gradient(180deg, #22303c 0%, #354757 100%); }
   body.weather-snow-day { --sky: linear-gradient(180deg, #27374a 0%, #465b72 100%); }
   body.weather-windy { --sky: linear-gradient(180deg, #1c2f31 0%, #334b4b 100%); }
+
+  body.weather-clear-night {
+    --sky: radial-gradient(circle at 85% 0%, rgba(120, 130, 220, 0.28), transparent 40%),
+      linear-gradient(180deg, #070b1e 0%, #141b3d 60%, #1f1a45 100%);
+  }
+  body.weather-partly-cloudy-night { --sky: linear-gradient(180deg, #0d1630 0%, #27334d 100%); }
+  body.weather-rainy-night { --sky: linear-gradient(180deg, #151c27 0%, #0c1016 100%); }
+  body.weather-snow-night { --sky: linear-gradient(180deg, #172131 0%, #33475e 100%); }
+  body.weather-thunderstorm {
+    --sky: radial-gradient(circle at 20% 0%, rgba(140, 110, 220, 0.22), transparent 45%),
+      linear-gradient(180deg, #211d33 0%, #0f0d18 100%);
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -338,6 +319,91 @@ input {
 .site-nav a.active {
   background: var(--accent-bg);
   color: var(--accent-ink);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Auto / Light / Dark: native radios, so arrow keys and the checked state
+   come for free. Hidden until theme.js has run (it sets data-theme-pref),
+   since the choice can't be applied without it. */
+.theme-toggle {
+  display: none;
+  margin: 0;
+  padding: 4px;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--shadow);
+}
+
+:root[data-theme-pref] .theme-toggle {
+  display: inline-flex;
+}
+
+.theme-toggle label {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+
+/* The radio stays in place (just transparent) so touch screen readers can
+   still find it under the finger. */
+.theme-toggle input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Same height as a .site-nav link, so the two pills line up. */
+.theme-face {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: calc(0.9rem * 1.4 + 0.8rem);
+  border-radius: 999px;
+  color: var(--text-muted);
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.theme-face svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.theme-toggle label:hover .theme-face {
+  color: var(--text);
+}
+
+.theme-toggle input:checked + .theme-face {
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+}
+
+.theme-toggle input:focus-visible + .theme-face {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .status-banner {
