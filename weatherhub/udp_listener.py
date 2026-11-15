@@ -58,6 +58,22 @@ _OBS_ST_FIELDS = (
     "report_interval",
 )
 
+# The observation fields an obs_st message provides (parse_obs_st returns
+# exactly these, plus "time"/"udp_updated_at"). The one authoritative list:
+# the REST poller uses it to know which cloud values to leave alone while a
+# fresh local reading exists.
+UDP_SENSOR_FIELDS = (
+    "air_temperature",
+    "relative_humidity",
+    "wind_lull",
+    "wind_avg",
+    "wind_gust",
+    "wind_direction",
+    "station_pressure",
+    "uv",
+    "solar_radiation",
+)
+
 
 def _c_to_f(celsius: float) -> float:
     return celsius * 9 / 5 + 32

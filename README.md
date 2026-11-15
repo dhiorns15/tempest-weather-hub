@@ -299,9 +299,14 @@ automatically:
   REST-only charts (rain, lightning, the Advanced group) and REST-only
   lines within a shared chart (feels-like and dew point on the Temperature
   chart) don't render either.
-- **Both**: full functionality, current conditions refresh from whichever
-  source last reported (UDP roughly every minute, REST every
-  `POLL_INTERVAL_SECONDS`), and both write to history independently.
+- **Both**: full functionality, and both write to history independently.
+  The cloud reports the sensors UDP also provides (temperature, humidity,
+  wind, pressure, UV, solar radiation) rounded coarser, so while the last
+  UDP reading is under 5 minutes old a cloud poll keeps the UDP values for
+  those fields - in current conditions and in the history row it writes -
+  and only adds its cloud-only fields. If UDP goes quiet, cloud values take
+  over as normal. The raw-resolution charts likewise skip older cloud rows'
+  readings of those fields wherever UDP readings sit within 5 minutes.
 
 ### Embedding a widget
 

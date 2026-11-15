@@ -771,12 +771,45 @@ function buildChartOptions(def) {
   };
 }
 
+// The cloud reports the same sensors as the local UDP broadcast, but rounded
+// coarser (whole degrees, 0.1 inHg, integer UV), so at raw resolution its
+// rows interleaved with the minute-by-minute UDP rows make a line zigzag.
+// A cloud row's reading of a "both" series is left out when a UDP reading
+// of that series lies within this distance of it either side; with no UDP
+// reading that close (cloud-only setups, history from before UDP was
+// enabled, UDP outages) cloud readings are all there is, so they stay.
+const COARSE_READING_REACH_MS = 5 * MINUTE_MS;
+
+// UDP rows always carry wind_lull, which the cloud doesn't report. (Cloud
+// rows stored while a fresh UDP reading existed carry the UDP values,
+// wind_lull included, so they count as local readings too.)
+function isLocalReading(row) {
+  return row.wind_lull != null;
+}
+
 // One series' real readings as {x: ms, y} points, oldest first.
 function seriesPoints(rows, timestamps, resolution, series) {
+  const skipCoarse = resolution === "raw" && series.source === "both";
+  const localTimes = [];
+  if (skipCoarse) {
+    rows.forEach((row, i) => {
+      if (isLocalReading(row) && row[series.raw] != null) localTimes.push(timestamps[i]);
+    });
+  }
+
   const points = [];
+  let nextLocal = 0; // index of the first local reading at or after the current row
   rows.forEach((row, i) => {
     const y = fieldValue(row, resolution, series.raw, series.agg);
-    if (y != null) points.push({ x: timestamps[i], y });
+    if (y == null) return;
+    const x = timestamps[i];
+    if (localTimes.length && !isLocalReading(row)) {
+      while (nextLocal < localTimes.length && localTimes[nextLocal] < x) nextLocal++;
+      const before = nextLocal > 0 ? x - localTimes[nextLocal - 1] : Infinity;
+      const after = nextLocal < localTimes.length ? localTimes[nextLocal] - x : Infinity;
+      if (Math.min(before, after) <= COARSE_READING_REACH_MS) return;
+    }
+    points.push({ x, y });
   });
   return points;
 }

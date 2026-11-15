@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from typing import Any
 
 
@@ -31,3 +32,17 @@ class LatestCache:
         """
         with self._lock:
             self._snapshot = {**(self._snapshot or {}), **partial}
+
+    def replace_with(
+        self, build: Callable[[dict[str, Any] | None], dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Atomically replace the snapshot with build(current snapshot).
+
+        For a writer whose new snapshot depends on what's already there (the
+        REST poller keeping fresh UDP readings), without another thread's
+        update() landing between its read and its write. Returns the new
+        snapshot.
+        """
+        with self._lock:
+            self._snapshot = build(self._snapshot)
+            return self._snapshot
